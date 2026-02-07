@@ -5,7 +5,14 @@ import { Utils } from '../../exp/TheorySDK.Linux.1.4.40/api/Utils';
 
 var id = 'small_world_networks';
 var name = 'Small World Networks';
-var description = 'Balance a noisy small world network.';
+var description =
+    "Small world networks set on the edge between order and randomness. " +
+    "Social circles, the internet, and even neural networks all show a curious mix of \"everyone in clusters, yet strangely close to everyone else.\"\n\n" +
+    "In this theory, you tune the rewiring probability of a Watts-Strogatz-style network to make it as small-world as possible. " +
+    "By choosing an optimal range of rewiring parameters, you shape the balance between local structure and global reach. " +
+    "As the network size grows and new upgrades unlock, you'll sharpen your control over this trade-off and amplify your gains.\n\n" +
+    "Can you find the sweet spot where order and randomness cooperate to produce the most efficient small-world network?"
+    ;
 var authors = 'panda_125';
 
 let currency;
@@ -362,7 +369,6 @@ var getSecondaryEquation = () => {
 
     res += `\\\\`;
 
-    // TODO: I think this is right? But should prob still check again some time.
     res += `L(z) = \\frac{\\theta}{\\sinh\\theta}, \\; \\theta = \\text{cosh}^{-1}\\left(\\frac{z+2}{2}\\right)`;
 
     res += `\\\\`;
