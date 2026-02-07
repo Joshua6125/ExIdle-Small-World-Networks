@@ -10,11 +10,10 @@ var authors = 'panda_125';
 
 let currency;
 let quaternaryEntries;
-let rangeMenu;
 
 let c1, c2, Ndot, A;
 
-let k = 2;
+let k = 0;
 let N = 10;
 
 let beta_min_lim = -8;
@@ -152,7 +151,7 @@ let init = () =>
     currency = theory.createCurrency();
 
     {
-        c1 = theory.createUpgrade(0, currency, new ExponentialCost(10, Math.log2(3)));
+        c1 = theory.createUpgrade(0, currency, new ExponentialCost(10, Math.log2(2)));
         let getDesc = (level) => "c_1 = " + getC1(level).toString(2);
         c1.getDescription = (_) => Utils.getMath(getDesc(c1.level));
         c1.getInfo = (amount) => Utils.getMathTo(getDesc(c1.level), getDesc(c1.level + amount));
@@ -199,14 +198,24 @@ let init = () =>
 
     /////////////////////
     // MILESTONES
-    const milestoneArray = [25, -1];
+    const milestoneArray = [25, 75, 125, 175, -1];
     theory.setMilestoneCost(new CustomCost((lvl) => tauRate * BigNumber.from(milestoneArray[Math.min(lvl, 1)])));
     {
     {
         AVariable = theory.createMilestoneUpgrade(0, 1);
-        AVariable.description = `Small range boost`;
+        AVariable.description = `Increase Peak Steepness`;
         AVariable.boughtOrRefunded = (_) => {
             theory.invalidatePrimaryEquation();
+            updateAvailability();
+        }
+    }
+    {
+        // TODO: This is not quite working as intended yet
+        kIncrease = theory.createMilestoneUpgrade(1, 3);
+        kIncrease.description = `Multiply k0 by 2`;
+        kIncrease.boughtOrRefunded = (_) => {
+            theory.invalidatePrimaryEquation();
+            theory.invalidateQuaternaryValues();
             updateAvailability();
         }
     }
@@ -221,33 +230,39 @@ var postPublish = () => {
     N = 10;
 }
 
-// Closed form formula's, I think they are correct.
-// But averaging using this seemed to not work very well?
+// Normalized clustering coefficient in Watts-Strogatz small-world models
+// C(p) roughly equals C(0)(1 - p)^3
+// So normalized C_n(p) = (1 - p)^3/C(0) = (1 - p)^3
+let getCNormClosed = (beta) => {
+    let p = BigNumber.TEN.pow(beta);
+    let log_10 = BigNumber.TEN.log();
 
-// let closedFormLNorm = (N, k, beta) => {
-//     let p = 10**beta;
+    let term1 = (BigNumber.THREE*p)/log_10;
+    let term2 = (BigNumber.THREE*(p.pow(2)))/(BigNumber.TWO*log_10);
+    let term3 = (p.pow(3))/(BigNumber.THREE*log_10)
 
-//     let z = N * k * p;
-//     let log10 = Math.log(10);
+    return beta - term1 + term2 - term3;
+}
 
-//     // This is the integral primitive of the NW approximation
-//     let numerator = 2 * (beta * log10 + Math.log(N * k) + 1);
-//     let denominator = z * log10;
+// Average shortest path length in small‑world networks derived in mean‑field analyses
+// (what is used in Newman-Moore-Watts models)
+// https://arxiv.org/pdf/cond-mat/9909165 (Eq 21)
+let getLNormClosed = (N, k, beta) => {
+    let p = BigNumber.TEN.pow(beta);
+    let z = N * k * p;
+    if (z <= 1e-10) return BigNumber.ONE.log().pow(2); // Limit as p -> 0 is log^2(1)
 
-//     // throw new Error(z)
+    let z2_4z = z.pow(2) + (BigNumber.FOUR * z);
+    let sqrt_term = z2_4z.sqrt();
 
-//     if (denominator == 0) {
-//         throw new Error(denominator);
-//     }
+    let res = (z + sqrt_term + BigNumber.TWO)/BigNumber.TWO;
 
-//     return numerator / denominator;
-// }
+    let numerator = res.log()*(BigNumber.FOUR.log())*(z + BigNumber.FOUR)*BigNumber.TWO
 
-// let closedFormCNorm = (beta) => {
-//     let p = 10**beta;
-//     let log_of_10 = Math.log(10);
-//     return beta - (3*p)/log_of_10 + (3*p*p)/(2*log_of_10) - (p*p*p)/(3*log_of_10);
-// }
+    let denominator = BigNumber.HUNDRED.log() * sqrt_term;
+
+    return beta - numerator/denominator;
+}
 
 let getLNorm = (N, k, p) => {
     let z = N * k * p;
@@ -266,6 +281,10 @@ let getCNorm = (p) => {
     return (BigNumber.ONE - p).pow(3);
 }
 
+let FFinal = 0;
+let Cnorm = 0;
+let Lnorm = 0;
+
 var tick = (elapsedTime, multiplier) =>
 {
     let dt = BigNumber.from(elapsedTime * multiplier);
@@ -274,7 +293,7 @@ var tick = (elapsedTime, multiplier) =>
     // Update N
     N += getNDot(Ndot.level) * dt;
     let N_val = BigNumber.from(N);
-    let k_val = BigNumber.from(k);
+    let k_val = getK(k);
 
     let start = BigNumber.from(beta_min_val);
     let end = BigNumber.from(beta_max_val);
@@ -282,31 +301,34 @@ var tick = (elapsedTime, multiplier) =>
     let range = end - start;
     if (range <= 0) range = BigNumber.from(0.01);
 
-    let samples = 10;
-    let step = range / BigNumber.from(samples);
-    let sumUtility = BigNumber.ZERO;
+    // Get average using integrals
+    let int_L_norm = getLNormClosed(N_val, k_val, beta_max_val) - getLNormClosed(N_val, k_val, beta_min_val);
+    // throw Error(int_L_norm)
 
-    for (let i = 0; i <= samples; i++) {
-        let currentBeta = start + (step * BigNumber.from(i));
-        let p = BigNumber.TEN.pow(currentBeta);
+    let int_C_norm = getCNormClosed(beta_max_val) - getCNormClosed(beta_min_val);
+    // throw Error(int_C_norm)
 
-        let utility = getCNorm(p) - getLNorm(N_val, k_val, p);
-        // if (utility < 0) {
-        //     throw new Error(getLNorm(N_val, k_val, p))
-        // }
-        sumUtility += utility;
-    }
+    Cnorm = int_C_norm;
+    Lnorm = int_L_norm;
 
-    let F = sumUtility / BigNumber.from(samples + 1);
+    // throw Error(int_C_norm - int_L_norm)
+
+    let F = (int_C_norm - int_L_norm)/range;
+
+    // throw Error(F)
 
     // Apply A_val to sharpen the curve
     let A_val = getA(A.level);
-    let final_F = F.max(BigNumber.ZERO).pow(A_val);
+    let final_F = F.pow(A_val);
+
+    // throw Error(final_F)
+
+    FFinal = final_F;
 
     let c1_val = getC1(c1.level);
     let c2_val = getC2(c2.level);
 
-    currency.value += dt * bonus * c1_val * c2_val * (final_F + 1);
+    currency.value += dt * bonus * c1_val * c2_val * (final_F );
     rhodot = c1_val * c2_val * (final_F + 1) * bonus;
 
     theory.invalidateSecondaryEquation();
@@ -315,38 +337,45 @@ var tick = (elapsedTime, multiplier) =>
 }
 
 var getPrimaryEquation = () => {
-    theory.primaryEquationHeight = 60;
-    let res = ``;
+    theory.primaryEquationHeight = 75;
+    let res = `\\dot{\\rho} = c_1 c_2 `;
 
-    res += `\\dot{\\rho} =`;
-    if (rangeMenu.level > 0) {
-        res += `\\frac{c_1 c_2}{\\beta_\\max - \\beta_\\min} \\int_{\\beta_\\min}^{\\beta_\\max} (C(10^x) - L(10^x)) \\; dx`;
-        return res;
-    }
+    // The 'Average' part
+    let avgUtility = `\\frac{1}{\\Delta\\beta} \\int_{\\beta_{\\min}}^{\\beta_{\\max}} U(x) dx`;
+
     if (AVariable.level > 0) {
-        res += `\\frac{c_1 c_2}{\\beta_\\max - \\beta_\\min} \\left( \\int_{\\beta_\\min}^{\\beta_\\max} (C(10^x) - L(N \\cdot k \\cdot 10^x)) \\; dx \\right)^{A}`;
-        return res;
+        // If A is unlocked, wrap the average in parenthesis
+        res += `\\left( ${avgUtility} \\right)^{A}`;
+    } else if (rangeMenu.level > 0) {
+        res += avgUtility;
+    } else {
+        // Default starting state
+        res += `\\int_{-8}^{0} U(x) dx`;
     }
 
-    return res + "c_1 c_2  \\int_{-8}^{0} (C(10^x) - L(10^x)) \\; dp";
+    return res;
 }
 
 var getSecondaryEquation = () => {
-    theory.secondaryEquationHeight = 60;
-    // Add part for L_norm, with substitution to make expression bearable
-    res = `L(z) = \\frac{2\\theta}{\\sinh(\\theta)} , \\theta = \\cosh^{-1}\\left( \\frac{z + 2}{2}\\right)`;
+    theory.secondaryEquationHeight = 85;
 
-    // Next line
-    res += `\\\\`;
+    // Define the Utility Function U(x)
+    let res = `U(x) = C(10^x) - L(N k 10^x)`; // \\Delta\\beta = \\beta_{\\max} - \\beta_{\\min}
 
-    // C_norm part
-    res += `C(p) = (1 - p)^3`;
+    res += `\\\\`; // New line
 
-    return res
+    // Compact L and C definitions
+    res += `L(z) = \\frac{2\\theta}{\\sinh\\theta}, \\; \\theta = \\text{cosh}^{-1}\\left(\\frac{z+2}{2}\\right)`;
+
+    res += `\\\\`; // New line
+
+    res += `C(p) = (1-p)^3`;
+
+    return res;
 }
 
 var getTertiaryEquation = () => {
-    return `\\rho = ${rhodot.toString(2)}`;
+    return `\\rho = ${rhodot.toString(2)}, F = ${FFinal.toString(6)}`;
 }
 
 var getQuaternaryEntries = () => {
@@ -355,6 +384,8 @@ var getQuaternaryEntries = () => {
     quaternaryEntries.push(new QuaternaryEntry("{\\rho}_{{}\\,}", null));
     quaternaryEntries.push(new QuaternaryEntry("{N}_{{}\\,}", null));
     quaternaryEntries.push(new QuaternaryEntry("{k_0}_{{}\\,}", null));
+    quaternaryEntries.push(new QuaternaryEntry("{C}_{{}\\,}", null));
+    quaternaryEntries.push(new QuaternaryEntry("{L}_{{}\\,}", null));
     if (rangeMenu.level > 0) {
         quaternaryEntries.push(new QuaternaryEntry("{\\beta_\\min}_{{}\\,}", null));
         quaternaryEntries.push(new QuaternaryEntry("{\\beta_\\max}_{{}\\,}", null));
@@ -362,10 +393,12 @@ var getQuaternaryEntries = () => {
 
     quaternaryEntries[0].value = `${rhodot.toString(2)}`;
     quaternaryEntries[1].value = `${N.toString(0)}`;
-    quaternaryEntries[2].value = `${k.toFixed(2)}`;
+    quaternaryEntries[2].value = `${(getK(k))}`;
+    quaternaryEntries[3].value = `${(Cnorm)}`;
+    quaternaryEntries[4].value = `${(Lnorm)}`;
     if (rangeMenu.level > 0) {
-        quaternaryEntries[3].value = `${beta_min_val.toFixed(2)}`;
-        quaternaryEntries[4].value = `${beta_max_val.toFixed(2)}`;
+        quaternaryEntries[5].value = `${beta_min_val.toFixed(2)}`;
+        quaternaryEntries[6].value = `${beta_max_val.toFixed(2)}`;
     }
 
     return quaternaryEntries;
@@ -389,6 +422,7 @@ var getCurrencyFromTau = (tau) =>
 let getC1 = (level) => BigNumber.from(1.35).pow(level);
 let getC2 = (level) => BigNumber.TWO.pow(level);
 let getNDot = (level) => BigNumber.from(level)/BigNumber.HUNDRED;
-let getA  = (level) => BigNumber.ONE + BigNumber.from(0.1)*BigNumber.from(level);
+let getA = (level) => BigNumber.ONE + BigNumber.from(0.1)*BigNumber.from(level);
+let getK = (level) => BigNumber.TWO.pow(1 + level);
 
 init();
