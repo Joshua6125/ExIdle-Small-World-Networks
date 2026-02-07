@@ -166,14 +166,14 @@ let init = () =>
 
     {
         Ndot = theory.createUpgrade(2, currency, new ExponentialCost(10, Math.log2(8)));
-        let getDesc = (level) => "\\dot{N} = " + getNDot(level).toString(0);
+        let getDesc = (level) => "\\dot{N} = " + getNDot(level).toString(2);
         Ndot.getDescription = (_) => Utils.getMath(getDesc(Ndot.level));
         Ndot.getInfo = (amount) => Utils.getMathTo(getDesc(Ndot.level), getDesc(Ndot.level + amount));
     }
 
     {
         A = theory.createUpgrade(3, currency, new ExponentialCost(1e25, Math.log2(10)));
-        let getDesc = (level) => "A = " + getC2(level).toString(0);
+        let getDesc = (level) => "A = " + getA(level).toString(2);
         A.getDescription = (_) => Utils.getMath(getDesc(A.level));
         A.getInfo = (amount) => Utils.getMathTo(getDesc(A.level), getDesc(A.level + amount));
     }
@@ -230,6 +230,23 @@ var postPublish = () => {
     N = 10;
 }
 
+let getLNorm = (N, k, p) => {
+    let z = N * k * p;
+    // if (z <= 1e-10) return BigNumber.ONE; // Limit as p -> 0 is 1.0
+
+    // L_norm = 2 * ln( (z + 2 + sqrt(z^2 + 4z)) / 2 ) / sqrt(z^2 + 4z)
+    let z2_4z = z.pow(BigNumber.TWO) + (BigNumber.FOUR * z);
+    let sqrt_term = z2_4z.sqrt();
+    let log_term = ((z + BigNumber.TWO + sqrt_term) / BigNumber.TWO).log();
+
+    return (BigNumber.TWO * log_term) / sqrt_term;
+}
+
+let getCNorm = (p) => {
+    // C_norm = (1 - p)^3
+    return (BigNumber.ONE - p).pow(3);
+}
+
 // Normalized clustering coefficient in Watts-Strogatz small-world models
 // C(p) roughly equals C(0)(1 - p)^3
 // So normalized C_n(p) = (1 - p)^3/C(0) = (1 - p)^3
@@ -238,8 +255,8 @@ let getCNormClosed = (beta) => {
     let log_10 = BigNumber.TEN.log();
 
     let term1 = (BigNumber.THREE*p)/log_10;
-    let term2 = (BigNumber.THREE*(p.pow(2)))/(BigNumber.TWO*log_10);
-    let term3 = (p.pow(3))/(BigNumber.THREE*log_10)
+    let term2 = (BigNumber.THREE*(p.pow(BigNumber.TWO)))/(BigNumber.TWO*log_10);
+    let term3 = (p.pow(BigNumber.THREE))/(BigNumber.THREE*log_10)
 
     return beta - term1 + term2 - term3;
 }
@@ -250,9 +267,8 @@ let getCNormClosed = (beta) => {
 let getLNormClosed = (N, k, beta) => {
     let p = BigNumber.TEN.pow(beta);
     let z = N * k * p;
-    if (z <= 1e-10) return BigNumber.ONE.log().pow(2); // Limit as p -> 0 is log^2(1)
 
-    let z2_4z = z.pow(2) + (BigNumber.FOUR * z);
+    let z2_4z = z.pow(BigNumber.TWO) + (BigNumber.FOUR * z);
     let sqrt_term = z2_4z.sqrt();
 
     let res = (z + sqrt_term + BigNumber.TWO)/BigNumber.TWO;
@@ -262,23 +278,6 @@ let getLNormClosed = (N, k, beta) => {
     let denominator = BigNumber.HUNDRED.log() * sqrt_term;
 
     return beta - numerator/denominator;
-}
-
-let getLNorm = (N, k, p) => {
-    let z = N * k * p;
-    if (z <= 1e-10) return BigNumber.ONE; // Limit as p -> 0 is 1.0
-
-    // L_norm = 2 * ln( (z + 2 + sqrt(z^2 + 4z)) / 2 ) / sqrt(z^2 + 4z)
-    let z2_4z = z.pow(2) + (BigNumber.FOUR * z);
-    let sqrt_term = z2_4z.sqrt();
-    let log_term = ((z + BigNumber.TWO + sqrt_term) / BigNumber.TWO).log();
-
-    return (BigNumber.TWO * log_term) / sqrt_term;
-}
-
-let getCNorm = (p) => {
-    // C_norm = (1 - p)^3
-    return (BigNumber.ONE - p).pow(3);
 }
 
 let FFinal = 0;
@@ -302,28 +301,27 @@ var tick = (elapsedTime, multiplier) =>
     if (range <= 0) range = BigNumber.from(0.01);
 
     // Get average using integrals
-    let int_L_norm = getLNormClosed(N_val, k_val, beta_max_val) - getLNormClosed(N_val, k_val, beta_min_val);
-    // throw Error(int_L_norm)
+    let int_L_norm = getLNormClosed(N_val, k_val, end) - getLNormClosed(N_val, k_val, start);
+    let int_C_norm = getCNormClosed(end) - getCNormClosed(start);
 
-    let int_C_norm = getCNormClosed(beta_max_val) - getCNormClosed(beta_min_val);
-    // throw Error(int_C_norm)
-
-    Cnorm = int_C_norm;
-    Lnorm = int_L_norm;
-
-    // throw Error(int_C_norm - int_L_norm)
+    Cnorm = int_C_norm; // NOTE: Temperary variable for debugging
+    Lnorm = int_L_norm; // NOTE: Temperary variable for debugging
 
     let F = (int_C_norm - int_L_norm)/range;
 
-    // throw Error(F)
+    if (!(F instanceof BigNumber)) {
+        throw Error(F);
+    }
 
-    // Apply A_val to sharpen the curve
+    if (F >= BigNumber.ONE) {
+        throw Error("F should not be greater than 1")
+    }
+
     let A_val = getA(A.level);
-    let final_F = F.pow(A_val);
 
-    // throw Error(final_F)
+    let final_F = (BigNumber.ONE - F).pow(-A_val);
 
-    FFinal = final_F;
+    FFinal = final_F; // NOTE: Temperary variable for debugging
 
     let c1_val = getC1(c1.level);
     let c2_val = getC2(c2.level);
@@ -345,7 +343,7 @@ var getPrimaryEquation = () => {
 
     if (AVariable.level > 0) {
         // If A is unlocked, wrap the average in parenthesis
-        res += `\\left( ${avgUtility} \\right)^{A}`;
+        res += `\\left(1 - ${avgUtility} \\right)^{-A}`;
     } else if (rangeMenu.level > 0) {
         res += avgUtility;
     } else {
@@ -360,14 +358,14 @@ var getSecondaryEquation = () => {
     theory.secondaryEquationHeight = 85;
 
     // Define the Utility Function U(x)
-    let res = `U(x) = C(10^x) - L(N k 10^x)`; // \\Delta\\beta = \\beta_{\\max} - \\beta_{\\min}
+    let res = `U(x) = C(10^x) - L(N k 10^x)`;
 
-    res += `\\\\`; // New line
+    res += `\\\\`;
 
-    // Compact L and C definitions
-    res += `L(z) = \\frac{2\\theta}{\\sinh\\theta}, \\; \\theta = \\text{cosh}^{-1}\\left(\\frac{z+2}{2}\\right)`;
+    // TODO: I think this is right? But should prob still check again some time.
+    res += `L(z) = \\frac{\\theta}{\\sinh\\theta}, \\; \\theta = \\text{cosh}^{-1}\\left(\\frac{z+2}{2}\\right)`;
 
-    res += `\\\\`; // New line
+    res += `\\\\`;
 
     res += `C(p) = (1-p)^3`;
 
@@ -419,10 +417,10 @@ var getCurrencyFromTau = (tau) =>
     currency.symbol
 ];
 
-let getC1 = (level) => BigNumber.from(1.35).pow(level);
+let getC1 = (level) => BigNumber.from(1.25).pow(level);
 let getC2 = (level) => BigNumber.TWO.pow(level);
 let getNDot = (level) => BigNumber.from(level)/BigNumber.HUNDRED;
-let getA = (level) => BigNumber.ONE + BigNumber.from(0.1)*BigNumber.from(level);
+let getA = (level) => BigNumber.ONE + BigNumber.from(0.01*level);
 let getK = (level) => BigNumber.TWO.pow(1 + level);
 
 init();
