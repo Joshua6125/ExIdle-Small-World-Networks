@@ -11,27 +11,23 @@ var description =
     "In this theory, you tune the rewiring probability of a Watts-Strogatz-style network to make it as small-world as possible. " +
     "By choosing an optimal range of rewiring parameters, you shape the balance between local structure and global reach. " +
     "As the network size grows and new upgrades unlock, you'll sharpen your control over this trade-off and amplify your gains.\n\n" +
-    "Can you find the sweet spot where order and randomness cooperate to produce the most efficient small-world network?"
-    ;
+    "Can you find the sweet spot where order and randomness cooperate to produce the most efficient small-world network?";
 var authors = 'panda_125';
 
 let currency;
 let quaternaryEntries;
 
-let c1, c2, Ndot, A;
+let rhodot = 0.0;
 
-let k = 0;
-let N = 10;
+let c1, c2, N, A;
 
-let beta_min_lim = -8;
+let smallWorldness = -1;
+
+let beta_min_lim = -4;
 let beta_max_lim = 0;
-
 let beta_min_val = beta_min_lim;
 let beta_max_val = beta_max_lim;
-
 const BETA_STEP = 0.01;
-
-let rhodot = 0.0;
 
 const pubPower = 0.2;
 const tauRate = 1;
@@ -40,8 +36,6 @@ const tauRate = 1;
 // - Buttons for more precision
 // - Show calculated p values
 var createTopRightMenu = () => {
-
-
     let betaLabelMax = ui.createLatexLabel({
         text: Utils.getMath(
             "\\beta_{max}=" + beta_max_val.toFixed(2)
@@ -98,7 +92,10 @@ var createTopRightMenu = () => {
                 ui.createButton({
                     margin: new Thickness(10),
                     text: "Done",
-                    onReleased: () => menu.hide()
+                    onReleased: () => {
+                        menu.hide();
+                        smallWorldness = computeOneOverOneMinusF();
+                    }
                 })
             ]
         })
@@ -172,10 +169,10 @@ let init = () =>
     }
 
     {
-        Ndot = theory.createUpgrade(2, currency, new ExponentialCost(10, Math.log2(8)));
-        let getDesc = (level) => "\\dot{N} = " + getNDot(level).toString(2);
-        Ndot.getDescription = (_) => Utils.getMath(getDesc(Ndot.level));
-        Ndot.getInfo = (amount) => Utils.getMathTo(getDesc(Ndot.level), getDesc(Ndot.level + amount));
+        N = theory.createUpgrade(2, currency, new ExponentialCost(10, Math.log2(8)));
+        let getDesc = (level) => "\\dot{N} = " + getNDot(level).toString(0);
+        N.getDescription = (_) => Utils.getMath(getDesc(N.level));
+        N.getInfo = (amount) => Utils.getMathTo(getDesc(N.level), getDesc(N.level + amount));
     }
 
     {
@@ -234,107 +231,142 @@ var updateAvailability = () => {
 }
 
 var postPublish = () => {
-    N = 10;
+    N = 1000;
 }
 
-let getLNorm = (N, k, p) => {
-    let z = N * k * p;
-    // if (z <= 1e-10) return BigNumber.ONE; // Limit as p -> 0 is 1.0
-
-    // L_norm = 2 * ln( (z + 2 + sqrt(z^2 + 4z)) / 2 ) / sqrt(z^2 + 4z)
-    let z2_4z = z.pow(BigNumber.TWO) + (BigNumber.FOUR * z);
-    let sqrt_term = z2_4z.sqrt();
-    let log_term = ((z + BigNumber.TWO + sqrt_term) / BigNumber.TWO).log();
-
-    return (BigNumber.TWO * log_term) / sqrt_term;
-}
-
-let getCNorm = (p) => {
-    // C_norm = (1 - p)^3
-    return (BigNumber.ONE - p).pow(3);
-}
-
-// Normalized clustering coefficient in Watts-Strogatz small-world models
-// C(p) roughly equals C(0)(1 - p)^3
-// So normalized C_n(p) = (1 - p)^3/C(0) = (1 - p)^3
-let getCNormClosed = (beta) => {
-    let p = BigNumber.TEN.pow(beta);
-    let log_10 = BigNumber.TEN.log();
-
-    let term1 = (BigNumber.THREE*p)/log_10;
-    let term2 = (BigNumber.THREE*(p.pow(BigNumber.TWO)))/(BigNumber.TWO*log_10);
-    let term3 = (p.pow(BigNumber.THREE))/(BigNumber.THREE*log_10)
-
-    return beta - term1 + term2 - term3;
+{
+// let getCNormClosed = (beta) => {
+//     let p = BigNumber.TEN.pow(beta);
+//     let log_10 = BigNumber.TEN.log();
+//     if (p <= BigNumber.from(10**(-16))) { return BigNumber.ONE } // p -> 0 implies C(p) -> 1
+//     let term1 = (BigNumber.THREE*p)/log_10;
+//     let term2 = BigNumber.THREE*(p.pow(BigNumber.TWO))/(BigNumber.TWO*log_10);
+//     let term3 = p.pow(BigNumber.THREE)/(BigNumber.THREE*log_10);
+//     // A(beta) = term1 - term2 + term3
+//     return term1 - term2 + term3;
+// };
+// let getLNormClosed = (N, k, beta) => {
+//     let p = BigNumber.TEN.pow(beta);
+//     let z = N * k * p;
+//     if (z <= BigNumber.from(10**(-16))) { return BigNumber.ONE } // p -> 0 implies L(p) -> 1
+//     let z2_4z = z.pow(BigNumber.TWO) + BigNumber.FOUR * z;
+//     let sqrt_term = z2_4z.sqrt();
+//     let res = (z + sqrt_term + BigNumber.TWO)/BigNumber.TWO;
+//     // B(beta) = 2 * log(res) * log10(2) * (z+4)/sqrt(z^2+4z)
+//     return (res.log()*LOG10_2 * BigNumber.TWO * (z + BigNumber.FOUR))/sqrt_term;
+// };
+//
+// let getCNormClosed = (beta) => {
+//     let p = BigNumber.TEN.pow(beta);
+//     let log_10 = BigNumber.TEN.log();
+//     let term1 = (BigNumber.THREE*p)/log_10;
+//     let term2 = (BigNumber.THREE*(p.pow(BigNumber.TWO)))/(BigNumber.TWO*log_10);
+//     let term3 = (p.pow(BigNumber.THREE))/(BigNumber.THREE*log_10)
+//     return beta - term1 + term2 - term3;
+// }
+//
+// let getLNormClosed = (N, k, beta) => {
+//     let p = BigNumber.TEN.pow(beta);
+//     let z = N * k * p;
+//     let z2_4z = z.pow(BigNumber.TWO) + (BigNumber.FOUR * z);
+//     let sqrt_term = z2_4z.sqrt();
+//     let res = (z + sqrt_term + BigNumber.TWO)/BigNumber.TWO;
+//     let numerator = res.log()*(BigNumber.FOUR.log())*(z + BigNumber.FOUR)*BigNumber.TWO
+//     let denominator = BigNumber.HUNDRED.log() * sqrt_term;
+//     return beta - numerator/denominator;
+// }
+// getLNormClosed without extra cancellation
 }
 
 // Average shortest path length in small‑world networks derived in mean‑field analyses
 // (what is used in Newman-Moore-Watts models)
 // https://arxiv.org/pdf/cond-mat/9909165 (Eq 21)
-let getLNormClosed = (N, k, beta) => {
-    let p = BigNumber.TEN.pow(beta);
-    let z = N * k * p;
+function getLNorm(N, k, p) {
+    const z = N * k * p;
 
-    let z2_4z = z.pow(BigNumber.TWO) + (BigNumber.FOUR * z);
-    let sqrt_term = z2_4z.sqrt();
+    // Might add extra guard if result proves to be unstable
+    // if (z <= 1e-10) return BigNumber.ONE; // Limit as p -> 0 is 1.0
 
-    let res = (z + sqrt_term + BigNumber.TWO)/BigNumber.TWO;
+    // L_norm = 2 * ln( (z + 2 + sqrt(z^2 + 4z)) / 2 ) / sqrt(z^2 + 4z)
+    const z2_4z = z.pow(BigNumber.TWO) + (BigNumber.FOUR * z);
+    const sqrt_term = z2_4z.sqrt();
+    const log_term = ((z + BigNumber.TWO + sqrt_term) / BigNumber.TWO).log();
 
-    let numerator = res.log()*(BigNumber.FOUR.log())*(z + BigNumber.FOUR)*BigNumber.TWO
-
-    let denominator = BigNumber.HUNDRED.log() * sqrt_term;
-
-    return beta - numerator/denominator;
+    return (BigNumber.TWO * log_term) / sqrt_term;
 }
 
+// Normalized clustering coefficient in Watts-Strogatz small-world models
+// C(p) roughly equals C(0)(1 - p)^3
+// So normalized C_n(p) = (1 - p)^3/C(0) = (1 - p)^3
+function getCNorm(p) {
+    // C_norm = (1 - p)^3
+    return (BigNumber.ONE - p).pow(BigNumber.THREE);
+}
+
+function computeOneOverOneMinusF() {
+    const N_val = getN(N.level); // TODO: Should make a getN()
+    const k_val = getK(k.level);
+
+    const start = beta_min_val;
+    const end = beta_max_val;
+
+    const range = end - start;
+    if (range <= 0) {
+        range = BigNumber.from(0.01);
+    }
+
+    // Because the utility function is pretty smooth the error scales O(h^2)
+    // 100 samples should be enough for now (<1% error)
+    const sample_rate = 100;
+    const step = range / (sample_rate - 1)
+
+    let avg_vals = []
+    for (let b = start; b <= end; b += step) {
+        const p = 10**b;
+
+        const C_val = getCNorm(p);
+        const L_val = getLNorm(N_val, k_val, p);
+
+        avg_vals.push(C_val - L_val);
+    }
+
+    let F = Math.sum(avg_vals)/sample_rate;
+    if (F >= 1 || F < 0) {
+        F = 0
+    }
+
+    // 1/(1 - F)
+    const res = BigNumber.from(1/(1 - F));
+
+    return res;
+}
+
+
 let FFinal = 0;
-let Cnorm = 0;
-let Lnorm = 0;
+let count = 0;
 
 var tick = (elapsedTime, multiplier) =>
 {
     let dt = BigNumber.from(elapsedTime * multiplier);
     let bonus = theory.publicationMultiplier;
 
-    // Update N
-    N += getNDot(Ndot.level) * dt;
-    let N_val = BigNumber.from(N);
-    let k_val = getK(k);
-
-    let start = BigNumber.from(beta_min_val);
-    let end = BigNumber.from(beta_max_val);
-
-    let range = end - start;
-    if (range <= 0) range = BigNumber.from(0.01);
-
-    // Get average using integrals
-    let int_L_norm = getLNormClosed(N_val, k_val, end) - getLNormClosed(N_val, k_val, start);
-    let int_C_norm = getCNormClosed(end) - getCNormClosed(start);
-
-    Cnorm = int_C_norm; // NOTE: Temperary variable for debugging
-    Lnorm = int_L_norm; // NOTE: Temperary variable for debugging
-
-    let F = (int_C_norm - int_L_norm)/range;
-
-    if (!(F instanceof BigNumber)) {
-        throw Error(F);
-    }
-
-    if (F >= BigNumber.ONE) {
-        throw Error("F should not be greater than 1")
-    }
-
     let A_val = getA(A.level);
 
-    let final_F = (BigNumber.ONE - F).pow(-A_val);
+    let F = smallWorldness;
+    if (F < 0) {
+        F = computeOneOverOneMinusF();
+    }
+    F = BigNumber.from(F);
 
-    FFinal = final_F; // NOTE: Temperary variable for debugging
+    let SW = F.pow(A_val);
+
+    FFinal = SW; // NOTE: Temperary variable for debugging
 
     let c1_val = getC1(c1.level);
     let c2_val = getC2(c2.level);
 
-    currency.value += dt * bonus * c1_val * c2_val * (final_F );
-    rhodot = c1_val * c2_val * (final_F + 1) * bonus;
+    currency.value += dt * bonus * c1_val * c2_val * SW;
+    rhodot = c1_val * c2_val * SW * bonus;
 
     theory.invalidateSecondaryEquation();
     theory.invalidateTertiaryEquation();
@@ -355,7 +387,7 @@ var getPrimaryEquation = () => {
         res += avgUtility;
     } else {
         // Default starting state
-        res += `\\int_{-8}^{0} U(x) dx`;
+        res += `\\int_{-4}^{0} U(x) dx`;
     }
 
     return res;
@@ -379,7 +411,7 @@ var getSecondaryEquation = () => {
 }
 
 var getTertiaryEquation = () => {
-    return `\\rho = ${rhodot.toString(2)}, F = ${FFinal.toString(6)}`;
+    return `\\text{count} = ${count.toString(2)}, F = ${FFinal.toString(6)}`;
 }
 
 var getQuaternaryEntries = () => {
@@ -388,8 +420,6 @@ var getQuaternaryEntries = () => {
     quaternaryEntries.push(new QuaternaryEntry("{\\rho}_{{}\\,}", null));
     quaternaryEntries.push(new QuaternaryEntry("{N}_{{}\\,}", null));
     quaternaryEntries.push(new QuaternaryEntry("{k_0}_{{}\\,}", null));
-    quaternaryEntries.push(new QuaternaryEntry("{C}_{{}\\,}", null));
-    quaternaryEntries.push(new QuaternaryEntry("{L}_{{}\\,}", null));
     if (rangeMenu.level > 0) {
         quaternaryEntries.push(new QuaternaryEntry("{\\beta_\\min}_{{}\\,}", null));
         quaternaryEntries.push(new QuaternaryEntry("{\\beta_\\max}_{{}\\,}", null));
@@ -398,11 +428,9 @@ var getQuaternaryEntries = () => {
     quaternaryEntries[0].value = `${rhodot.toString(2)}`;
     quaternaryEntries[1].value = `${N.toString(0)}`;
     quaternaryEntries[2].value = `${(getK(k))}`;
-    quaternaryEntries[3].value = `${(Cnorm)}`;
-    quaternaryEntries[4].value = `${(Lnorm)}`;
     if (rangeMenu.level > 0) {
-        quaternaryEntries[5].value = `${beta_min_val.toFixed(2)}`;
-        quaternaryEntries[6].value = `${beta_max_val.toFixed(2)}`;
+        quaternaryEntries[3].value = `${beta_min_val.toFixed(2)}`;
+        quaternaryEntries[4].value = `${beta_max_val.toFixed(2)}`;
     }
 
     return quaternaryEntries;
