@@ -2,14 +2,13 @@ import { BigNumber } from '../../exp/TheorySDK.Linux.1.4.40/api/BigNumber';
 import { ExponentialCost, FreeCost } from '../../exp/TheorySDK.Linux.1.4.40/api/Costs';
 import { QuaternaryEntry, theory } from '../../exp/TheorySDK.Linux.1.4.40/api/Theory';
 import { LayoutOptions } from '../../exp/TheorySDK.Linux.1.4.40/api/ui/properties/LayoutOptions';
-import { StackOrientation } from '../../exp/TheorySDK.Linux.1.4.40/api/ui/properties/StackOrientation';
 import { Utils } from '../../exp/TheorySDK.Linux.1.4.40/api/Utils';
 
 var id = 'small_world_networks';
 var name = 'Small World Networks';
 var description =
     "Small world networks sit on the edge between order and chaos. " +
-    "Social circles, the internet, and even neural networks all show a curious mix of \"everyone is in small clusters, yet strangely close to everyone else.\"\n\n" +
+    "Social circles, the internet, and even neural networks all show a mix of everything being both close while seemingly being far away.\n\n" +
     "In this theory, you tune the rewiring probability of a Watts-Strogatz-style network to make it as small-world as possible. " +
     "By choosing an optimal range of rewiring parameters you shape the balance between local structure and global reach. " +
     "As the network size grows and new upgrades unlock, you'll sharpen your control over this trade-off and amplify your gains.\n\n" +
@@ -22,8 +21,6 @@ let quaternaryEntries;
 let rhodot = 0.0;
 
 var c1, c2, N, A;
-
-let k = 2;
 
 var smallWorldness = BigNumber.ZERO;
 
@@ -46,9 +43,9 @@ var createTopRightMenu = () => {
     });
 
     function updateSWLabel() {
-        smallWorldness = computeOneOverOneMinusF(100)
+        const SW_val = computeF();
         SWLabel.text = Utils.getMath(
-            "\\frac{1}{\\Delta\\beta} \\int_{\\beta_{\\min}}^{\\beta_{\\max}} U(x) dx = " + smallWorldness.toString(2)
+            "\\frac{1}{\\Delta\\beta} \\int_{\\beta_{\\min}}^{\\beta_{\\max}} U(x) dx = " + SW_val.toString(2)
         )
     }
 
@@ -161,7 +158,7 @@ var createTopRightMenu = () => {
                     text: "Done",
                     onReleased: () => {
                         menu.hide();
-                        smallWorldness = computeFWithTolerance();
+                        smallWorldness = computeOneOverOneMinusFAccurate();
                     }
                 })
             ]
@@ -259,7 +256,7 @@ let init = () =>
     {
         rangeMenu = theory.createPermanentUpgrade(3, currency, new LinearCost(1e12, 0));
         rangeMenu.maxLevel = 1;
-        rangeMenu.getDescription = (_) => `${Localization.getUpgradeAddTermInfo("v")}`;
+        rangeMenu.getDescription = (_) => `Add variable ranges`;
         rangeMenu.getInfo = (_) => Localization.getUpgradeUnlockInfo("\\text{Range Menu}");
         rangeMenu.boughtOrRefunded = (_) => {
             theory.invalidatePrimaryEquation();
@@ -282,6 +279,7 @@ let init = () =>
     }
     {
         // TODO: This is not quite working as intended yet
+        //       Somehow you get 3 points in one go?
         kIncrease = theory.createMilestoneUpgrade(1, 3);
         kIncrease.description = `Multiply k0 by 2`;
         kIncrease.boughtOrRefunded = (_) => {
@@ -291,10 +289,7 @@ let init = () =>
         }
     }
     {
-        // TODO: Here we want to extend the limit by -2
-    }
-    {
-        // TODO:
+        // TODO: Here we want to extend the limit by -m
     }
     }
 }
@@ -308,58 +303,11 @@ var updateAvailability = () => {
 var postPublish = () => {
 }
 
-{
-// let getCNormClosed = (beta) => {
-//     let p = BigNumber.TEN.pow(beta);
-//     let log_10 = BigNumber.TEN.log();
-//     if (p <= BigNumber.from(10**(-16))) { return BigNumber.ONE } // p -> 0 implies C(p) -> 1
-//     let term1 = (BigNumber.THREE*p)/log_10;
-//     let term2 = BigNumber.THREE*(p.pow(BigNumber.TWO))/(BigNumber.TWO*log_10);
-//     let term3 = p.pow(BigNumber.THREE)/(BigNumber.THREE*log_10);
-//     // A(beta) = term1 - term2 + term3
-//     return term1 - term2 + term3;
-// };
-// let getLNormClosed = (N, k, beta) => {
-//     let p = BigNumber.TEN.pow(beta);
-//     let z = N * k * p;
-//     if (z <= BigNumber.from(10**(-16))) { return BigNumber.ONE } // p -> 0 implies L(p) -> 1
-//     let z2_4z = z.pow(BigNumber.TWO) + BigNumber.FOUR * z;
-//     let sqrt_term = z2_4z.sqrt();
-//     let res = (z + sqrt_term + BigNumber.TWO)/BigNumber.TWO;
-//     // B(beta) = 2 * log(res) * log10(2) * (z+4)/sqrt(z^2+4z)
-//     return (res.log()*LOG10_2 * BigNumber.TWO * (z + BigNumber.FOUR))/sqrt_term;
-// };
-//
-// let getCNormClosed = (beta) => {
-//     let p = BigNumber.TEN.pow(beta);
-//     let log_10 = BigNumber.TEN.log();
-//     let term1 = (BigNumber.THREE*p)/log_10;
-//     let term2 = (BigNumber.THREE*(p.pow(BigNumber.TWO)))/(BigNumber.TWO*log_10);
-//     let term3 = (p.pow(BigNumber.THREE))/(BigNumber.THREE*log_10)
-//     return beta - term1 + term2 - term3;
-// }
-//
-// let getLNormClosed = (N, k, beta) => {
-//     let p = BigNumber.TEN.pow(beta);
-//     let z = N * k * p;
-//     let z2_4z = z.pow(BigNumber.TWO) + (BigNumber.FOUR * z);
-//     let sqrt_term = z2_4z.sqrt();
-//     let res = (z + sqrt_term + BigNumber.TWO)/BigNumber.TWO;
-//     let numerator = res.log()*(BigNumber.FOUR.log())*(z + BigNumber.FOUR)*BigNumber.TWO
-//     let denominator = BigNumber.HUNDRED.log() * sqrt_term;
-//     return beta - numerator/denominator;
-// }
-// getLNormClosed without extra cancellation
-}
-
 // Average shortest path length in small‑world networks derived in mean‑field analyses
 // (what is used in Newman-Moore-Watts models)
 // https://arxiv.org/pdf/cond-mat/9909165 (Eq 21)
 function getLNorm(N, k, p) {
     const z = N * k * p;
-
-    // Might add extra guard if result proves to be unstable
-    // if (z <= 1e-10) return BigNumber.ONE; // Limit as p -> 0 is 1.0
 
     // L_norm = 2 * ln( (z + 2 + sqrt(z^2 + 4z)) / 2 ) / sqrt(z^2 + 4z)
     const z2_4z = z**2 + (4 * z);
@@ -378,12 +326,12 @@ function getCNorm(p) {
 }
 
 
-function computeOneOverOneMinusF(sample_rate = 100) {
+function computeF(sample_rate=100) {
     const N_val = getN(N.level);
     const k_val = getK(kIncrease.level);
 
     const start = beta_min_val;
-    const end   = beta_max_val;
+    const end = beta_max_val;
 
     let range = end - start;
     if (range <= 0) {
@@ -403,7 +351,6 @@ function computeOneOverOneMinusF(sample_rate = 100) {
 
         const f = C_val - L_val;
 
-        // trapezoid rule. 0.5 at endpoints, 1.0 inside
         const w = (i === 0 || i === n) ? 0.5 : 1.0;
         integral += w * f;
     }
@@ -414,32 +361,9 @@ function computeOneOverOneMinusF(sample_rate = 100) {
         F = 0;
     }
 
-    // I think these can get large, so we make them BigNumbers
     const res = BigNumber.ONE / (BigNumber.ONE - BigNumber.from(F));
 
     return res;
-}
-
-
-// This allows better estimation for real formula
-function computeFWithTolerance(tol = BigNumber.from(1e-5), maxRate = 4000) {
-    let rate = 200;
-    let lastF = null;
-
-    while (true) {
-        const F = computeOneOverOneMinusF(rate);
-
-        if (lastF !== null && (F - lastF).abs() < tol) {
-            return F;
-        }
-
-        if (rate >= maxRate) {
-            return F;
-        }
-
-        rate *= 2;
-        lastF = F;
-    }
 }
 
 
@@ -455,7 +379,7 @@ var tick = (elapsedTime, multiplier) =>
     const N_now = getN(N.level);
 
     if (smallWorldness < BigNumber.ZERO || prev_N !== N_now) {
-        smallWorldness = computeFWithTolerance();
+        smallWorldness = computeF();
         prev_N = N_now;
     }
 
@@ -528,7 +452,7 @@ var getQuaternaryEntries = () => {
 
     quaternaryEntries[0].value = `${rhodot.toString(2)}`;
     quaternaryEntries[1].value = `${getN(N.level).toString(0)}`;
-    quaternaryEntries[2].value = `${(getK(k)).toString(0)}`;
+    quaternaryEntries[2].value = `${(getK(kIncrease.level)).toString(0)}`;
     if (rangeMenu.level > 0) {
         quaternaryEntries[3].value = `${beta_min_val.toFixed(2)}`;
         quaternaryEntries[4].value = `${beta_max_val.toFixed(2)}`;
@@ -552,9 +476,9 @@ var getCurrencyFromTau = (tau) =>
     currency.symbol
 ];
 
-let getC1 = (level) => BigNumber.from(1.25).pow(level);
+let getC1 = (level) => BigNumber.from(1.35).pow(level);
 let getC2 = (level) => BigNumber.TWO.pow(level);
-let getN = (level) => BigNumber.TEN * BigNumber.from(1.2).pow(level);
+let getN = (level) => BigNumber.TEN * BigNumber.from(1.1).pow(level);
 let getA = (level) => BigNumber.ONE + BigNumber.from(0.05*level);
 let getK = (level) => BigNumber.TWO.pow(1 + level);
 
