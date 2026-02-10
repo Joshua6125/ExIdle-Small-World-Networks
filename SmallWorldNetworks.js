@@ -1,15 +1,17 @@
 import { BigNumber } from '../../exp/TheorySDK.Linux.1.4.40/api/BigNumber';
 import { ExponentialCost, FreeCost } from '../../exp/TheorySDK.Linux.1.4.40/api/Costs';
 import { QuaternaryEntry, theory } from '../../exp/TheorySDK.Linux.1.4.40/api/Theory';
+import { LayoutOptions } from '../../exp/TheorySDK.Linux.1.4.40/api/ui/properties/LayoutOptions';
+import { StackOrientation } from '../../exp/TheorySDK.Linux.1.4.40/api/ui/properties/StackOrientation';
 import { Utils } from '../../exp/TheorySDK.Linux.1.4.40/api/Utils';
 
 var id = 'small_world_networks';
 var name = 'Small World Networks';
 var description =
-    "Small world networks set on the edge between order and randomness. " +
-    "Social circles, the internet, and even neural networks all show a curious mix of \"everyone in clusters, yet strangely close to everyone else.\"\n\n" +
+    "Small world networks sit on the edge between order and chaos. " +
+    "Social circles, the internet, and even neural networks all show a curious mix of \"everyone is in small clusters, yet strangely close to everyone else.\"\n\n" +
     "In this theory, you tune the rewiring probability of a Watts-Strogatz-style network to make it as small-world as possible. " +
-    "By choosing an optimal range of rewiring parameters, you shape the balance between local structure and global reach. " +
+    "By choosing an optimal range of rewiring parameters you shape the balance between local structure and global reach. " +
     "As the network size grows and new upgrades unlock, you'll sharpen your control over this trade-off and amplify your gains.\n\n" +
     "Can you find the sweet spot where order and randomness cooperate to produce the most efficient small-world network?";
 var authors = 'panda_125';
@@ -19,9 +21,11 @@ let quaternaryEntries;
 
 let rhodot = 0.0;
 
-let c1, c2, N, A;
+var c1, c2, N, A;
 
-let smallWorldness = -1;
+let k = 2;
+
+var smallWorldness = BigNumber.ZERO;
 
 let beta_min_lim = -4;
 let beta_max_lim = 0;
@@ -32,10 +36,22 @@ const BETA_STEP = 0.01;
 const pubPower = 0.2;
 const tauRate = 1;
 
-// Potential extra features for UI
-// - Buttons for more precision
-// - Show calculated p values
+// TODO: Potential extra features for UI
+//     - Make buttons horizontal
 var createTopRightMenu = () => {
+    let SWLabel = ui.createLatexLabel({
+        text: Utils.getMath(
+            "\\frac{1}{\\Delta\\beta} \\int_{\\beta_{\\min}}^{\\beta_{\\max}} U(x) dx = " + smallWorldness.toString(2)
+        )
+    });
+
+    function updateSWLabel() {
+        smallWorldness = computeOneOverOneMinusF(100)
+        SWLabel.text = Utils.getMath(
+            "\\frac{1}{\\Delta\\beta} \\int_{\\beta_{\\min}}^{\\beta_{\\max}} U(x) dx = " + smallWorldness.toString(2)
+        )
+    }
+
     let betaLabelMax = ui.createLatexLabel({
         text: Utils.getMath(
             "\\beta_{max}=" + beta_max_val.toFixed(2)
@@ -48,18 +64,28 @@ var createTopRightMenu = () => {
         )
     });
 
+    function updateBetaMaxVals() {
+        betaLabelMax.text = Utils.getMath(
+            "\\beta_{max}=" + beta_max_val.toFixed(2)
+        );
+        betaMaxSlider.value = beta_max_val;
+    }
+
+    function updateBetaMinVals() {
+        betaLabelMin.text = Utils.getMath(
+            "\\beta_{min}=" + beta_min_val.toFixed(2)
+        );
+        betaMinSlider.value = beta_min_val;
+    }
+
     let betaMaxSlider = ui.createSlider({
         minimum: beta_min_lim + BETA_STEP,
         maximum: beta_max_lim,
         value: beta_max_val,
         onValueChanged: () => {
             beta_max_val = Math.max(betaMaxSlider.value, beta_min_val + BETA_STEP);
-            betaMaxSlider.value = beta_max_val;
-
-            betaLabelMax.text = Utils.getMath(
-                "\\beta_{max}=" + beta_max_val.toFixed(2)
-            );
-
+            updateBetaMaxVals();
+            updateSWLabel();
             theory.invalidatePrimaryEquation();
         }
     });
@@ -70,14 +96,52 @@ var createTopRightMenu = () => {
         value: beta_min_val,
         onValueChanged: () => {
             beta_min_val = Math.min(betaMinSlider.value, beta_max_val - BETA_STEP);
-            betaMinSlider.value = beta_min_val;
-
-            betaLabelMin.text = Utils.getMath(
-                "\\beta_{min}=" + beta_min_val.toFixed(2)
-            );
-
+            updateBetaMinVals();
+            updateSWLabel();
             theory.invalidatePrimaryEquation();
         }
+    });
+
+    let betaMaxButtons = ui.createStackLayout({
+        children: [
+            ui.createButton({
+                text: "-0.01",
+                onReleased: () => {
+                    beta_max_val = Math.max(beta_min_val + BETA_STEP, beta_max_val - 0.01);
+                    updateBetaMaxVals();
+                    updateSWLabel();
+                }
+            }),
+            ui.createButton({
+                text: "+0.01",
+                onReleased: () => {
+                    beta_max_val = Math.min(beta_max_lim, beta_max_val + 0.01);
+                    updateBetaMaxVals();
+                    updateSWLabel();
+                }
+            })
+        ]
+    });
+
+    let betaMinButtons = ui.createStackLayout({
+        children: [
+            ui.createButton({
+                text: "-0.01",
+                onReleased: () => {
+                    beta_min_val = Math.max(beta_min_lim, beta_min_val - 0.01);
+                    updateBetaMinVals();
+                    updateSWLabel();
+                }
+            }),
+            ui.createButton({
+                text: "+0.01",
+                onReleased: () => {
+                    beta_min_val = Math.min(beta_max_val - BETA_STEP, beta_min_val + 0.01);
+                    updateBetaMinVals()
+                    updateSWLabel();
+                }
+            })
+        ]
     });
 
     let menu = ui.createPopup({
@@ -85,16 +149,19 @@ var createTopRightMenu = () => {
         title: "Beta Slider",
         content: ui.createStackLayout({
             children: [
+                SWLabel,
                 betaLabelMax,
                 betaMaxSlider,
+                betaMaxButtons,
                 betaLabelMin,
                 betaMinSlider,
+                betaMinButtons,
                 ui.createButton({
                     margin: new Thickness(10),
                     text: "Done",
                     onReleased: () => {
                         menu.hide();
-                        smallWorldness = computeOneOverOneMinusF();
+                        smallWorldness = computeFWithTolerance();
                     }
                 })
             ]
@@ -170,7 +237,7 @@ let init = () =>
 
     {
         N = theory.createUpgrade(2, currency, new ExponentialCost(10, Math.log2(8)));
-        let getDesc = (level) => "\\dot{N} = " + getNDot(level).toString(0);
+        let getDesc = (level) => "N = " + getN(level).toString(0);
         N.getDescription = (_) => Utils.getMath(getDesc(N.level));
         N.getInfo = (amount) => Utils.getMathTo(getDesc(N.level), getDesc(N.level + amount));
     }
@@ -223,15 +290,22 @@ let init = () =>
             updateAvailability();
         }
     }
+    {
+        // TODO: Here we want to extend the limit by -2
+    }
+    {
+        // TODO:
+    }
     }
 }
 
 var updateAvailability = () => {
+    kIncrease.isAvailable = AVariable.level > 0
+
     A.isAvailable = AVariable.level > 0
 }
 
 var postPublish = () => {
-    N = 1000;
 }
 
 {
@@ -288,11 +362,11 @@ function getLNorm(N, k, p) {
     // if (z <= 1e-10) return BigNumber.ONE; // Limit as p -> 0 is 1.0
 
     // L_norm = 2 * ln( (z + 2 + sqrt(z^2 + 4z)) / 2 ) / sqrt(z^2 + 4z)
-    const z2_4z = z.pow(BigNumber.TWO) + (BigNumber.FOUR * z);
+    const z2_4z = z**2 + (4 * z);
     const sqrt_term = z2_4z.sqrt();
-    const log_term = ((z + BigNumber.TWO + sqrt_term) / BigNumber.TWO).log();
+    const log_term = Math.log((z + 2 + sqrt_term) / 2);
 
-    return (BigNumber.TWO * log_term) / sqrt_term;
+    return (2 * log_term) / sqrt_term;
 }
 
 // Normalized clustering coefficient in Watts-Strogatz small-world models
@@ -300,70 +374,97 @@ function getLNorm(N, k, p) {
 // So normalized C_n(p) = (1 - p)^3/C(0) = (1 - p)^3
 function getCNorm(p) {
     // C_norm = (1 - p)^3
-    return (BigNumber.ONE - p).pow(BigNumber.THREE);
+    return (1 - p)**3;
 }
 
-function computeOneOverOneMinusF() {
-    const N_val = getN(N.level); // TODO: Should make a getN()
-    const k_val = getK(k.level);
+
+function computeOneOverOneMinusF(sample_rate = 100) {
+    const N_val = getN(N.level);
+    const k_val = getK(kIncrease.level);
 
     const start = beta_min_val;
-    const end = beta_max_val;
+    const end   = beta_max_val;
 
-    const range = end - start;
+    let range = end - start;
     if (range <= 0) {
-        range = BigNumber.from(0.01);
+        range = 0.01;
     }
 
-    // Because the utility function is pretty smooth the error scales O(h^2)
-    // 100 samples should be enough for now (<1% error)
-    const sample_rate = 100;
-    const step = range / (sample_rate - 1)
+    const n = sample_rate - 1;
+    const h = range / n;
 
-    let avg_vals = []
-    for (let b = start; b <= end; b += step) {
-        const p = 10**b;
+    let integral = 0;
+    for (let i = 0; i <= n; i++) {
+        const b = start + i * h;
+        const p = Math.pow(10, b);
 
         const C_val = getCNorm(p);
         const L_val = getLNorm(N_val, k_val, p);
 
-        avg_vals.push(C_val - L_val);
+        const f = C_val - L_val;
+
+        // trapezoid rule. 0.5 at endpoints, 1.0 inside
+        const w = (i === 0 || i === n) ? 0.5 : 1.0;
+        integral += w * f;
     }
 
-    let F = Math.sum(avg_vals)/sample_rate;
+    let F = integral * (h / range);
+
     if (F >= 1 || F < 0) {
-        F = 0
+        F = 0;
     }
 
-    // 1/(1 - F)
-    const res = BigNumber.from(1/(1 - F));
+    // I think these can get large, so we make them BigNumbers
+    const res = BigNumber.ONE / (BigNumber.ONE - BigNumber.from(F));
 
     return res;
 }
 
 
-let FFinal = 0;
-let count = 0;
+// This allows better estimation for real formula
+function computeFWithTolerance(tol = BigNumber.from(1e-5), maxRate = 4000) {
+    let rate = 200;
+    let lastF = null;
 
+    while (true) {
+        const F = computeOneOverOneMinusF(rate);
+
+        if (lastF !== null && (F - lastF).abs() < tol) {
+            return F;
+        }
+
+        if (rate >= maxRate) {
+            return F;
+        }
+
+        rate *= 2;
+        lastF = F;
+    }
+}
+
+
+let FFinal = 0;
+
+let prev_N;
 var tick = (elapsedTime, multiplier) =>
 {
-    let dt = BigNumber.from(elapsedTime * multiplier);
-    let bonus = theory.publicationMultiplier;
+    const dt = BigNumber.from(elapsedTime * multiplier);
+    const bonus = theory.publicationMultiplier;
 
-    let A_val = getA(A.level);
+    const A_val = getA(A.level);
+    const N_now = getN(N.level);
 
-    let F = smallWorldness;
-    if (F < 0) {
-        F = computeOneOverOneMinusF();
+    if (smallWorldness < BigNumber.ZERO || prev_N !== N_now) {
+        smallWorldness = computeFWithTolerance();
+        prev_N = N_now;
     }
-    F = BigNumber.from(F);
 
-    let SW = F.pow(A_val);
+    const SW = smallWorldness.pow(A_val);
 
     FFinal = SW; // NOTE: Temperary variable for debugging
 
-    let c1_val = getC1(c1.level);
-    let c2_val = getC2(c2.level);
+    const c1_val = getC1(c1.level);
+    const c2_val = getC2(c2.level);
 
     currency.value += dt * bonus * c1_val * c2_val * SW;
     rhodot = c1_val * c2_val * SW * bonus;
@@ -378,7 +479,7 @@ var getPrimaryEquation = () => {
     let res = `\\dot{\\rho} = c_1 c_2 `;
 
     // The 'Average' part
-    let avgUtility = `\\frac{1}{\\Delta\\beta} \\int_{\\beta_{\\min}}^{\\beta_{\\max}} U(x) dx`;
+    const avgUtility = `\\frac{1}{\\Delta\\beta} \\int_{\\beta_{\\min}}^{\\beta_{\\max}} U(x) dx`;
 
     if (AVariable.level > 0) {
         // If A is unlocked, wrap the average in parenthesis
@@ -411,7 +512,7 @@ var getSecondaryEquation = () => {
 }
 
 var getTertiaryEquation = () => {
-    return `\\text{count} = ${count.toString(2)}, F = ${FFinal.toString(6)}`;
+    return `F = ${FFinal.toString(6)}`;
 }
 
 var getQuaternaryEntries = () => {
@@ -426,8 +527,8 @@ var getQuaternaryEntries = () => {
     }
 
     quaternaryEntries[0].value = `${rhodot.toString(2)}`;
-    quaternaryEntries[1].value = `${N.toString(0)}`;
-    quaternaryEntries[2].value = `${(getK(k))}`;
+    quaternaryEntries[1].value = `${getN(N.level).toString(0)}`;
+    quaternaryEntries[2].value = `${(getK(k)).toString(0)}`;
     if (rangeMenu.level > 0) {
         quaternaryEntries[3].value = `${beta_min_val.toFixed(2)}`;
         quaternaryEntries[4].value = `${beta_max_val.toFixed(2)}`;
@@ -453,8 +554,8 @@ var getCurrencyFromTau = (tau) =>
 
 let getC1 = (level) => BigNumber.from(1.25).pow(level);
 let getC2 = (level) => BigNumber.TWO.pow(level);
-let getNDot = (level) => BigNumber.from(level)/BigNumber.HUNDRED;
-let getA = (level) => BigNumber.ONE + BigNumber.from(0.01*level);
+let getN = (level) => BigNumber.TEN * BigNumber.from(1.2).pow(level);
+let getA = (level) => BigNumber.ONE + BigNumber.from(0.05*level);
 let getK = (level) => BigNumber.TWO.pow(1 + level);
 
 init();
