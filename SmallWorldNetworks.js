@@ -20,7 +20,7 @@ var quaternaryEntries;
 
 var rhodot = BigNumber.ZERO;
 
-var c1, c2, N, q1;
+var c1, c2, N, q1, q2;
 
 var q = BigNumber.ZERO;
 var smallWorldness = BigNumber.ZERO;
@@ -241,14 +241,14 @@ let init = () => {
     currency = theory.createCurrency();
 
     {
-        c1 = theory.createUpgrade(0, currency, new ExponentialCost(10, Math.log2(2)));
+        c1 = theory.createUpgrade(0, currency, new ExponentialCost(10, Math.log2(1.67)));
         let getDesc = (level) => "c_1 = " + getC1(level).toString(2);
         c1.getDescription = (_) => Utils.getMath(getDesc(c1.level));
         c1.getInfo = (amount) => Utils.getMathTo(getDesc(c1.level), getDesc(c1.level + amount));
     }
 
     {
-        c2 = theory.createUpgrade(1, currency, new ExponentialCost(10, Math.log2(8)));
+        c2 = theory.createUpgrade(1, currency, new ExponentialCost(10, Math.log2(7.5)));
         let getDesc = (level) => "c_2 = " + getC2(level).toString(0);
         c2.getDescription = (_) => Utils.getMath(getDesc(c2.level));
         c2.getInfo = (amount) => Utils.getMathTo(getDesc(c2.level), getDesc(c2.level + amount));
@@ -262,10 +262,17 @@ let init = () => {
     }
 
     {
-        q1 = theory.createUpgrade(3, currency, new ExponentialCost(10, Math.log2(8)));
+        q1 = theory.createUpgrade(3, currency, new ExponentialCost(10, Math.log2(7)));
         let getDesc = (level) => "q_1 = " + getQ1(level).toString(2);
         q1.getDescription = (_) => Utils.getMath(getDesc(q1.level));
         q1.getInfo = (amount) => Utils.getMathTo(getDesc(q1.level), getDesc(q1.level + amount));
+    }
+
+    {
+        q2 = theory.createUpgrade(4, currency, new ExponentialCost(1e25, Math.log2(1.8)));
+        let getDesc = (level) => "q_2 = " + getQ2(level).toString(2);
+        q2.getDescription = (_) => Utils.getMath(getDesc(q2.level));
+        q2.getInfo = (amount) => Utils.getMathTo(getDesc(q2.level), getDesc(q2.level + amount));
     }
 
 
@@ -287,16 +294,19 @@ let init = () => {
 
     /////////////////////
     // MILESTONES
-
-    // BUG: This is not quite working as intended yet
-    //      Somehow you get 12 points in one go?
-    // const milestoneArray = [25, 50, 75, 100, 125, 175, 225, 275, 325, 375, 425, 475, 525, 625, -1];
-    // theory.setMilestoneCost(new CustomCost((lvl) => BigNumber.from(milestoneArray[Math.min(lvl, 1)])));
     theory.setMilestoneCost(new CustomCost(total => BigNumber.from(tauRate * getMilestoneCost(total))));
     {
     {
-        kIncrease = theory.createMilestoneUpgrade(0, 8);
-        kIncrease.description = `Multiply k0 by 2`;
+        q2Unlock = theory.createMilestoneUpgrade(0, 1);
+        q2Unlock.description = `Unlock variable $q_2$`;
+        q2Unlock.boughtOrRefunded = (_) => {
+            theory.invalidateSecondaryEquation();
+            updateAvailability();
+        }
+    }
+    {
+        kIncrease = theory.createMilestoneUpgrade(1, 8);
+        kIncrease.description = `${Localization.getUpgradeMultCustomInfo("k_0", "10")}`;
         kIncrease.boughtOrRefunded = (_) => {
             theory.invalidatePrimaryEquation();
             theory.invalidateQuaternaryValues();
@@ -304,24 +314,24 @@ let init = () => {
         }
     }
     {
-        FExponent = theory.createMilestoneUpgrade(1, 3);
-        FExponent.description = `Increase Peak Steepness`;
+        FExponent = theory.createMilestoneUpgrade(2, 3);
+        FExponent.description = `${Localization.getUpgradeIncCustomExpInfo("{\\hat{F}}", "0.5")}`;
         FExponent.boughtOrRefunded = (_) => {
             theory.invalidatePrimaryEquation();
             updateAvailability();
         }
-        FExponent.canBeRefunded = (_) => kIncrease.level > 0
+        FExponent.canBeRefunded = (_) => q2Unlock.level > 0
     }
     {
-        rangeIncrease = theory.createMilestoneUpgrade(2, 3);
-        rangeIncrease.description = `Increase range by 2`;
+        rangeIncrease = theory.createMilestoneUpgrade(3, 3);
+        rangeIncrease.description = `Increase range size by 2`;
         rangeIncrease.boughtOrRefunded = (_) => {
             theory.invalidatePrimaryEquation();
             theory.invalidateQuaternaryValues();
             updateAvailability();
             updateRange()
         }
-        rangeIncrease.canBeRefunded = (_) => kIncrease.level > 0
+        rangeIncrease.canBeRefunded = (_) => q2Unlock.level > 0
     }
     }
 
@@ -364,19 +374,24 @@ var getMilestoneCost = (level) => {
             return 650;
         case 15:
             return 700;
-        case 16:
-            return 800;
-        case 17:
-            return 900;
-        case 18:
-            return 1000;
+        // case 16:
+        //     return 750;
+        // case 17:
+        //     return 800;
+        // case 18:
+        //     return 900;
+        // case 18:
+        //     return 1000;
     }
     return 5000;
 };
 
 var updateAvailability = () => {
-    FExponent.isAvailable = kIncrease.level > 0
-    rangeIncrease.isAvailable = kIncrease.level > 0
+    FExponent.isAvailable = q2Unlock.level > 0;
+    rangeIncrease.isAvailable = q2Unlock.level > 0;
+    kIncrease.isAvailable = q2Unlock.level > 0;
+
+    q2.isAvailable = q2Unlock.level > 0;
 }
 
 function updateRange() {
@@ -543,8 +558,9 @@ var tick = (elapsedTime, multiplier) => {
     // Update q
     const SW = smallWorldness.pow(Exp_val);
     const q1_val = getQ1(q1.level);
+    const q2_val = getQ2(q2.level);
 
-    q += dt * SW * q1_val;
+    q += dt * SW * q1_val + dt * SW * q2_val;
 
     // Update rho
     const c1_val = getC1(c1.level);
@@ -601,6 +617,10 @@ var getSecondaryEquation = () => {
         theory.secondaryEquationHeight = 60;
         res += `\\dot{q} = q_1 \\hat{F}`;
 
+        if (q2Unlock.level > 0) {
+            res += ` + q_2 \\hat{F}`
+        }
+
         res += `\\\\`;
 
         res += `\\hat{F} = `;
@@ -610,7 +630,7 @@ var getSecondaryEquation = () => {
         if (FExponent.level > 0) {
             res += `\\left( \\frac{1}{1 - F} \\right)^{${FExponent.level % 2 == 0 ? FExp.toString(0) : FExp.toString(1)}}`;
         } else {
-            res += `\\left( \\frac{1}{1 - F} \\right)`;
+            res += `\\frac{1}{1 - F}`;
         }
     }
 
@@ -686,6 +706,7 @@ let getC1 = (level) => BigNumber.from(1.12).pow(level);
 let getC2 = (level) => BigNumber.TWO.pow(level);
 let getN = (level) => BigNumber.TEN * BigNumber.from(1.1).pow(level);
 let getQ1 = (level) => BigNumber.from(1.35).pow(level);
+let getQ2 = (level) => BigNumber.from(5000) * Utils.getStepwisePowerSum(level, 10, 25, 0);
 let getFExp = (level) => BigNumber.ONE + BigNumber.from(0.5*level);
 let getK = (level) => BigNumber.TWO * BigNumber.TEN.pow(level);
 
