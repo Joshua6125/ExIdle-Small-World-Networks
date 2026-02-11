@@ -39,7 +39,7 @@ let local_beta_max = beta_max_val;
 const BETA_STEP = 0.01;
 
 const pubExponent = 0.2;
-const tauRate = 1;
+const tauRate = 0.4;
 
 var createTopRightMenu = () => {
     let SWLabel = ui.createLatexLabel({
@@ -59,34 +59,34 @@ var createTopRightMenu = () => {
     let betaLabelMax = ui.createLatexLabel({
         horizontalOptions: LayoutOptions.CENTER,
         text: Utils.getMath(
-            "\\beta_{max}=" + beta_max_val.toFixed(2)
+            "\\beta^+=" + beta_max_val.toFixed(2)
         )
     });
 
     let betaLabelMin = ui.createLatexLabel({
         horizontalOptions: LayoutOptions.CENTER,
         text: Utils.getMath(
-            "\\beta_{min}=" + beta_min_val.toFixed(2)
+            "\\beta^-=" + beta_min_val.toFixed(2)
         )
     });
 
     function updateBetaMaxVals() {
         betaLabelMax.text = Utils.getMath(
-            "\\beta_{max}=" + local_beta_max.toFixed(2)
+            "\\beta^+=" + local_beta_max.toFixed(2)
         );
         betaMaxSlider.value = local_beta_max;
     }
 
     function updateBetaMinVals() {
         betaLabelMin.text = Utils.getMath(
-            "\\beta_{min}=" + local_beta_min.toFixed(2)
+            "\\beta^-=" + local_beta_min.toFixed(2)
         );
         betaMinSlider.value = local_beta_min;
     }
 
     let betaMaxSlider = ui.createSlider({
-        minimum: beta_min_lim + BETA_STEP,
-        maximum: beta_max_lim,
+        minimum: () => beta_min_lim + BETA_STEP,
+        maximum: () => beta_max_lim,
         value: local_beta_max,
         onValueChanged: () => {
             local_beta_max = Math.max(betaMaxSlider.value, local_beta_min + BETA_STEP);
@@ -97,8 +97,8 @@ var createTopRightMenu = () => {
     });
 
     let betaMinSlider = ui.createSlider({
-        minimum: beta_min_lim,
-        maximum: beta_max_lim - BETA_STEP,
+        minimum: () => beta_min_lim,
+        maximum: () => beta_max_lim - BETA_STEP,
         value: local_beta_min,
         onValueChanged: () => {
             local_beta_min = Math.min(betaMinSlider.value, local_beta_max - BETA_STEP);
@@ -191,7 +191,7 @@ var createTopRightMenu = () => {
     return menu;
 }
 
-const topRightMenu = createTopRightMenu();
+var topRightMenu = createTopRightMenu();
 
 var getEquationOverlay = () =>
 {
@@ -290,25 +290,27 @@ let init = () => {
 
     // BUG: This is not quite working as intended yet
     //      Somehow you get 12 points in one go?
-    const milestoneArray = [25, 50, 75, 100, 125, 175, 225, 275, 325, 375, 425, 475, 525, 625, -1];
-    theory.setMilestoneCost(new CustomCost((lvl) => BigNumber.from(milestoneArray[Math.min(lvl, 1)])));
+    // const milestoneArray = [25, 50, 75, 100, 125, 175, 225, 275, 325, 375, 425, 475, 525, 625, -1];
+    // theory.setMilestoneCost(new CustomCost((lvl) => BigNumber.from(milestoneArray[Math.min(lvl, 1)])));
+    theory.setMilestoneCost(new CustomCost(total => BigNumber.from(tauRate * getMilestoneCost(total))));
     {
     {
-        FExponent = theory.createMilestoneUpgrade(0, 3);
-        FExponent.description = `Increase Peak Steepness`;
-        FExponent.boughtOrRefunded = (_) => {
-            theory.invalidatePrimaryEquation();
-            updateAvailability();
-        }
-    }
-    {
-        kIncrease = theory.createMilestoneUpgrade(1, 8);
+        kIncrease = theory.createMilestoneUpgrade(0, 8);
         kIncrease.description = `Multiply k0 by 2`;
         kIncrease.boughtOrRefunded = (_) => {
             theory.invalidatePrimaryEquation();
             theory.invalidateQuaternaryValues();
             updateAvailability();
         }
+    }
+    {
+        FExponent = theory.createMilestoneUpgrade(1, 3);
+        FExponent.description = `Increase Peak Steepness`;
+        FExponent.boughtOrRefunded = (_) => {
+            theory.invalidatePrimaryEquation();
+            updateAvailability();
+        }
+        FExponent.canBeRefunded = (_) => kIncrease.level > 0
     }
     {
         rangeIncrease = theory.createMilestoneUpgrade(2, 3);
@@ -319,6 +321,7 @@ let init = () => {
             updateAvailability();
             updateRange()
         }
+        rangeIncrease.canBeRefunded = (_) => kIncrease.level > 0
     }
     }
 
@@ -326,13 +329,62 @@ let init = () => {
     updateRange();
 }
 
+// milestone costs in rho
+var getMilestoneCost = (level) => {
+    switch(level) {
+        case 0:
+            return 25;
+        case 1:
+            return 45;
+        case 2:
+            return 70;
+        case 3:
+            return 100;
+        case 4:
+            return 150;
+        case 5:
+            return 200;
+        case 6:
+            return 250;
+        case 7:
+            return 300;
+        case 8:
+            return 350;
+        case 9:
+            return 400;
+        case 10:
+            return 450;
+        case 11:
+            return 500;
+        case 12:
+            return 550;
+        case 13:
+            return 600;
+        case 14:
+            return 650;
+        case 15:
+            return 700;
+        case 16:
+            return 800;
+        case 17:
+            return 900;
+        case 18:
+            return 1000;
+    }
+    return 5000;
+};
+
 var updateAvailability = () => {
-    kIncrease.isAvailable = FExponent.level > 0
-    rangeIncrease.isAvailable = FExponent.level > 0
+    FExponent.isAvailable = kIncrease.level > 0
+    rangeIncrease.isAvailable = kIncrease.level > 0
 }
 
 function updateRange() {
     beta_min_lim = -3 - 2 * rangeIncrease.level;
+    beta_max_val = beta_max_lim;
+    beta_min_val = beta_min_lim;
+
+    topRightMenu = createTopRightMenu();
 }
 
 var postPublish = () => {
@@ -517,7 +569,7 @@ var getPrimaryEquation = () => {
     } else {
         res += `F = `
 
-        const avg_utility = `\\frac{1}{\\beta_\\max - \\beta_\\min} \\int_{\\beta_{\\min}}^{\\beta_{\\max}} U(x) dx`;
+        const avg_utility = `\\frac{1}{\\beta^+ - \\beta^-} \\int_{\\beta^-}^{\\beta^+} U(x) dx`;
 
         if (rangeMenu.level > 0) {
             res += `${avg_utility}`;
@@ -630,11 +682,11 @@ var getPublicationMultiplierFormula = (symbol) => `${symbol}^{${pubExponent}}`;
 var getTau = () => currency.value.pow(tauRate);
 var getCurrencyFromTau = (tau) => [tau.max(BigNumber.ONE).pow(BigNumber.ONE / tauRate), currency.symbol]
 
-let getC1 = (level) => BigNumber.from(1.1).pow(level);
+let getC1 = (level) => BigNumber.from(1.12).pow(level);
 let getC2 = (level) => BigNumber.TWO.pow(level);
 let getN = (level) => BigNumber.TEN * BigNumber.from(1.1).pow(level);
 let getQ1 = (level) => BigNumber.from(1.35).pow(level);
 let getFExp = (level) => BigNumber.ONE + BigNumber.from(0.5*level);
-let getK = (level) => BigNumber.TWO.pow(1 + level);
+let getK = (level) => BigNumber.TWO * BigNumber.TEN.pow(level);
 
 init();
