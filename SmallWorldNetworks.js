@@ -22,12 +22,16 @@ let rhodot = 0.0;
 
 var c1, c2, N, A;
 
+var q = 0;
+
 var smallWorldness = BigNumber.ZERO;
 
-let beta_min_lim = -4;
+let beta_min_lim = -3;
 let beta_max_lim = 0;
 let beta_min_val = beta_min_lim;
 let beta_max_val = beta_max_lim;
+let local_beta_min = beta_min_val;
+let local_beta_max = beta_max_val;
 const BETA_STEP = 0.01;
 
 const pubPower = 0.2;
@@ -37,25 +41,28 @@ const tauRate = 1;
 //     - Make buttons horizontal
 var createTopRightMenu = () => {
     let SWLabel = ui.createLatexLabel({
+        horizontalOptions: LayoutOptions.CENTER,
         text: Utils.getMath(
             "\\frac{1}{\\Delta\\beta} \\int_{\\beta_{\\min}}^{\\beta_{\\max}} U(x) dx = " + smallWorldness.toString(2)
         )
     });
 
     function updateSWLabel() {
-        const SW_val = computeF();
+        const SW_val = computeF(local_beta_min, local_beta_max);
         SWLabel.text = Utils.getMath(
             "\\frac{1}{\\Delta\\beta} \\int_{\\beta_{\\min}}^{\\beta_{\\max}} U(x) dx = " + SW_val.toString(2)
         )
     }
 
     let betaLabelMax = ui.createLatexLabel({
+        horizontalOptions: LayoutOptions.CENTER,
         text: Utils.getMath(
             "\\beta_{max}=" + beta_max_val.toFixed(2)
         )
     });
 
     let betaLabelMin = ui.createLatexLabel({
+        horizontalOptions: LayoutOptions.CENTER,
         text: Utils.getMath(
             "\\beta_{min}=" + beta_min_val.toFixed(2)
         )
@@ -63,24 +70,24 @@ var createTopRightMenu = () => {
 
     function updateBetaMaxVals() {
         betaLabelMax.text = Utils.getMath(
-            "\\beta_{max}=" + beta_max_val.toFixed(2)
+            "\\beta_{max}=" + local_beta_max.toFixed(2)
         );
-        betaMaxSlider.value = beta_max_val;
+        betaMaxSlider.value = local_beta_max;
     }
 
     function updateBetaMinVals() {
         betaLabelMin.text = Utils.getMath(
-            "\\beta_{min}=" + beta_min_val.toFixed(2)
+            "\\beta_{min}=" + local_beta_min.toFixed(2)
         );
-        betaMinSlider.value = beta_min_val;
+        betaMinSlider.value = local_beta_min;
     }
 
     let betaMaxSlider = ui.createSlider({
         minimum: beta_min_lim + BETA_STEP,
         maximum: beta_max_lim,
-        value: beta_max_val,
+        value: local_beta_max,
         onValueChanged: () => {
-            beta_max_val = Math.max(betaMaxSlider.value, beta_min_val + BETA_STEP);
+            local_beta_max = Math.max(betaMaxSlider.value, local_beta_min + BETA_STEP);
             updateBetaMaxVals();
             updateSWLabel();
             theory.invalidatePrimaryEquation();
@@ -90,9 +97,9 @@ var createTopRightMenu = () => {
     let betaMinSlider = ui.createSlider({
         minimum: beta_min_lim,
         maximum: beta_max_lim - BETA_STEP,
-        value: beta_min_val,
+        value: local_beta_min,
         onValueChanged: () => {
-            beta_min_val = Math.min(betaMinSlider.value, beta_max_val - BETA_STEP);
+            local_beta_min = Math.min(betaMinSlider.value, local_beta_max - BETA_STEP);
             updateBetaMinVals();
             updateSWLabel();
             theory.invalidatePrimaryEquation();
@@ -100,11 +107,13 @@ var createTopRightMenu = () => {
     });
 
     let betaMaxButtons = ui.createStackLayout({
+        orientation: StackOrientation.HORIZONTAL,
+        horizontalOptions: LayoutOptions.CENTER,
         children: [
             ui.createButton({
                 text: "-0.01",
                 onReleased: () => {
-                    beta_max_val = Math.max(beta_min_val + BETA_STEP, beta_max_val - 0.01);
+                    local_beta_max = Math.max(local_beta_min + BETA_STEP, local_beta_max - BETA_STEP);
                     updateBetaMaxVals();
                     updateSWLabel();
                 }
@@ -112,7 +121,7 @@ var createTopRightMenu = () => {
             ui.createButton({
                 text: "+0.01",
                 onReleased: () => {
-                    beta_max_val = Math.min(beta_max_lim, beta_max_val + 0.01);
+                    local_beta_max = Math.min(beta_max_lim, local_beta_max + BETA_STEP);
                     updateBetaMaxVals();
                     updateSWLabel();
                 }
@@ -121,11 +130,13 @@ var createTopRightMenu = () => {
     });
 
     let betaMinButtons = ui.createStackLayout({
+        orientation: StackOrientation.HORIZONTAL,
+        horizontalOptions: LayoutOptions.CENTER,
         children: [
             ui.createButton({
                 text: "-0.01",
                 onReleased: () => {
-                    beta_min_val = Math.max(beta_min_lim, beta_min_val - 0.01);
+                    local_beta_min = Math.max(beta_min_lim, local_beta_min - BETA_STEP);
                     updateBetaMinVals();
                     updateSWLabel();
                 }
@@ -133,7 +144,7 @@ var createTopRightMenu = () => {
             ui.createButton({
                 text: "+0.01",
                 onReleased: () => {
-                    beta_min_val = Math.min(beta_max_val - BETA_STEP, beta_min_val + 0.01);
+                    local_beta_min = Math.min(local_beta_max - BETA_STEP, local_beta_min + BETA_STEP);
                     updateBetaMinVals()
                     updateSWLabel();
                 }
@@ -158,7 +169,15 @@ var createTopRightMenu = () => {
                     text: "Done",
                     onReleased: () => {
                         menu.hide();
-                        smallWorldness = computeOneOverOneMinusFAccurate();
+
+                        // Set new variables
+                        beta_min_val = local_beta_min;
+                        beta_max_val = local_beta_max;
+                        smallWorldness = computeF();
+
+                        // Reset local variables
+                        local_beta_min = beta_min_lim;
+                        local_beta_max = beta_max_lim;
                     }
                 })
             ]
@@ -310,12 +329,14 @@ function getLNorm(N, k, p) {
     const z = N * k * p;
 
     // L_norm = 2 * ln( (z + 2 + sqrt(z^2 + 4z)) / 2 ) / sqrt(z^2 + 4z)
-    const z2_4z = z**2 + (4 * z);
+    const z2_4z = z.pow(BigNumber.TWO) + (BigNumber.FOUR * z);
     const sqrt_term = z2_4z.sqrt();
-    const log_term = Math.log((z + 2 + sqrt_term) / 2);
+    const log_term = ((z + BigNumber.TWO + sqrt_term) / BigNumber.TWO).log();
+    const BNres = (BigNumber.TWO * log_term) / sqrt_term;
 
-    return (2 * log_term) / sqrt_term;
+    return BNres.toNumber();
 }
+
 
 // Normalized clustering coefficient in Watts-Strogatz small-world models
 // C(p) roughly equals C(0)(1 - p)^3
@@ -325,51 +346,119 @@ function getCNorm(p) {
     return (1 - p)**3;
 }
 
+// 32-point Gauss–Legendre nodes (x) on [-1, 1]
+const GL32_X = [
+  -0.9972638618494816,
+  -0.9856115115452684,
+  -0.9647622555875064,
+  -0.9349060759377397,
+  -0.8963211557660521,
+  -0.8493676137325699,
+  -0.7944837959679424,
+  -0.7321821187402897,
+  -0.6630442669302152,
+  -0.5877157572407623,
+  -0.5068999089322294,
+  -0.4213512761306353,
+  -0.3318686022821277,
+  -0.2392873622521371,
+  -0.1444719615827965,
+  -0.04830766568773832,
+   0.04830766568773832,
+   0.1444719615827965,
+   0.2392873622521371,
+   0.3318686022821277,
+   0.4213512761306353,
+   0.5068999089322294,
+   0.5877157572407623,
+   0.6630442669302152,
+   0.7321821187402897,
+   0.7944837959679424,
+   0.8493676137325699,
+   0.8963211557660521,
+   0.9349060759377397,
+   0.9647622555875064,
+   0.9856115115452684,
+   0.9972638618494816
+];
 
-function computeF(sample_rate=100) {
+// 32-point Gauss–Legendre weights (w) on [-1, 1]
+const GL32_W = [
+  0.0070186100094700966,
+  0.01627439473090567,
+  0.02539206530926206,
+  0.03427386291302143,
+  0.04283589802222668,
+  0.05099805926237622,
+  0.05868409347853555,
+  0.06582222277636185,
+  0.07234579410884851,
+  0.07819389578707031,
+  0.08331192422694673,
+  0.08765209300440381,
+  0.09117387869576388,
+  0.09384439908080457,
+  0.09563872007927486,
+  0.09654008851472780,
+  0.09654008851472780,
+  0.09563872007927486,
+  0.09384439908080457,
+  0.09117387869576388,
+  0.08765209300440381,
+  0.08331192422694673,
+  0.07819389578707031,
+  0.07234579410884851,
+  0.06582222277636185,
+  0.05868409347853555,
+  0.05099805926237622,
+  0.04283589802222668,
+  0.03427386291302143,
+  0.02539206530926206,
+  0.01627439473090567,
+  0.0070186100094700966
+];
+
+function computeF(start = beta_min_val, end = beta_max_val) {
     const N_val = getN(N.level);
     const k_val = getK(kIncrease.level);
 
-    const start = beta_min_val;
-    const end = beta_max_val;
-
     let range = end - start;
     if (range <= 0) {
-        range = 0.01;
+        return 0;
     }
 
-    const n = sample_rate - 1;
-    const h = range / n;
+    const mid  = (start + end) / 2;
+    const half = range / 2;
 
-    let integral = 0;
-    for (let i = 0; i <= n; i++) {
-        const b = start + i * h;
-        const p = Math.pow(10, b);
+    let sum = 0
+
+    for (let i = 0; i < GL32_X.length; i++) {
+        const xi = GL32_X[i];
+        const wi = GL32_W[i];
+
+        const beta = mid + half * xi;
+        const p = 10**beta;
 
         const C_val = getCNorm(p);
         const L_val = getLNorm(N_val, k_val, p);
 
         const f = C_val - L_val;
-
-        const w = (i === 0 || i === n) ? 0.5 : 1.0;
-        integral += w * f;
+        sum += wi * f;
     }
 
-    let F = integral * (h / range);
+    let avg = sum / 2;
 
-    if (F >= 1 || F < 0) {
-        F = 0;
+    if (avg < 0 || avg >= 1) {
+        avg = 0;
     }
 
-    const res = BigNumber.ONE / (BigNumber.ONE - BigNumber.from(F));
-
-    return res;
+    return BigNumber.ONE/(BigNumber.ONE - BigNumber.from(avg));
 }
 
 
 let FFinal = 0;
 
-let prev_N;
+let prev_N, prev_k;
 var tick = (elapsedTime, multiplier) =>
 {
     const dt = BigNumber.from(elapsedTime * multiplier);
@@ -377,10 +466,12 @@ var tick = (elapsedTime, multiplier) =>
 
     const A_val = getA(A.level);
     const N_now = getN(N.level);
+    const k_now = getK(kIncrease.level)
 
-    if (smallWorldness < BigNumber.ZERO || prev_N !== N_now) {
+    if (smallWorldness <= BigNumber.ZERO || prev_N !== N_now || prev_k !== k_now) {
         smallWorldness = computeF();
         prev_N = N_now;
+        prev_k = k_now;
     }
 
     const SW = smallWorldness.pow(A_val);
@@ -402,14 +493,14 @@ var getPrimaryEquation = () => {
     theory.primaryEquationHeight = 75;
     let res = `\\dot{\\rho} = c_1 c_2 `;
 
-    // The 'Average' part
-    const avgUtility = `\\frac{1}{\\Delta\\beta} \\int_{\\beta_{\\min}}^{\\beta_{\\max}} U(x) dx`;
+    // The average part
+    const avg_utility = `\\frac{1}{\\Delta\\beta} \\int_{\\beta_{\\min}}^{\\beta_{\\max}} U(x) dx`;
 
     if (AVariable.level > 0) {
         // If A is unlocked, wrap the average in parenthesis
-        res += `\\left(1 - ${avgUtility} \\right)^{-A}`;
+        res += `\\left(1 - ${avg_utility} \\right)^{-A}`;
     } else if (rangeMenu.level > 0) {
-        res += avgUtility;
+        res += avg_utility;
     } else {
         // Default starting state
         res += `\\int_{-4}^{0} U(x) dx`;
@@ -479,7 +570,7 @@ var getCurrencyFromTau = (tau) =>
 let getC1 = (level) => BigNumber.from(1.35).pow(level);
 let getC2 = (level) => BigNumber.TWO.pow(level);
 let getN = (level) => BigNumber.TEN * BigNumber.from(1.1).pow(level);
-let getA = (level) => BigNumber.ONE + BigNumber.from(0.05*level);
+let getA = (level) => BigNumber.ONE + BigNumber.from(0.01*level);
 let getK = (level) => BigNumber.TWO.pow(1 + level);
 
 init();
