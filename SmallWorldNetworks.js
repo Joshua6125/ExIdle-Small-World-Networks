@@ -18,13 +18,14 @@ var authors = 'panda_125';
 let currency;
 let quaternaryEntries;
 
-let rhodot = 0.0;
+let rhodot = BigNumber.ZERO;
+let qdot = BigNumber.ZERO;
 
-var c1, c2, N, A;
+let c1, c2, N, q1;
 
-var q = 0;
+let q = BigNumber.ZERO;
 
-var smallWorldness = BigNumber.ZERO;
+let smallWorldness = BigNumber.ZERO;
 
 let beta_min_lim = -3;
 let beta_max_lim = 0;
@@ -36,9 +37,8 @@ const BETA_STEP = 0.01;
 
 const pubPower = 0.2;
 const tauRate = 1;
+const pubExponent = 0.2;
 
-// TODO: Potential extra features for UI
-//     - Make buttons horizontal
 var createTopRightMenu = () => {
     let SWLabel = ui.createLatexLabel({
         horizontalOptions: LayoutOptions.CENTER,
@@ -178,6 +178,8 @@ var createTopRightMenu = () => {
                         // Reset local variables
                         local_beta_min = beta_min_lim;
                         local_beta_max = beta_max_lim;
+
+                        q = BigNumber.ZERO;
                     }
                 })
             ]
@@ -259,10 +261,10 @@ let init = () =>
     }
 
     {
-        A = theory.createUpgrade(3, currency, new ExponentialCost(1e25, Math.log2(10)));
-        let getDesc = (level) => "A = " + getA(level).toString(2);
-        A.getDescription = (_) => Utils.getMath(getDesc(A.level));
-        A.getInfo = (amount) => Utils.getMathTo(getDesc(A.level), getDesc(A.level + amount));
+        q1 = theory.createUpgrade(3, currency, new ExponentialCost(10, Math.log2(8)));
+        let getDesc = (level) => "q_1 = " + getQ1(level).toString(2);
+        q1.getDescription = (_) => Utils.getMath(getDesc(q1.level));
+        q1.getInfo = (amount) => Utils.getMathTo(getDesc(q1.level), getDesc(q1.level + amount));
     }
 
 
@@ -270,10 +272,8 @@ let init = () =>
     // PERMANENT UPGRADES
     theory.createPublicationUpgrade(0, currency, 1e7);
     theory.createBuyAllUpgrade(1, currency, 1e10);
-    theory.createAutoBuyerUpgrade(2, currency, 1e25);
-
     {
-        rangeMenu = theory.createPermanentUpgrade(3, currency, new LinearCost(1e12, 0));
+        rangeMenu = theory.createPermanentUpgrade(2, currency, new LinearCost(1e12, 0));
         rangeMenu.maxLevel = 1;
         rangeMenu.getDescription = (_) => `Add variable ranges`;
         rangeMenu.getInfo = (_) => Localization.getUpgradeUnlockInfo("\\text{Range Menu}");
@@ -282,24 +282,25 @@ let init = () =>
             updateAvailability();
         }
     }
+    theory.createAutoBuyerUpgrade(3, currency, 1e25);
 
     /////////////////////
     // MILESTONES
-    const milestoneArray = [25, 75, 125, 175, -1];
-    theory.setMilestoneCost(new CustomCost((lvl) => tauRate * BigNumber.from(milestoneArray[Math.min(lvl, 1)])));
+    const milestoneArray = [25, 50, 75, 100, 125, 175, 225, 275, 325, 375, 425, 475, 525, 625, -1];
+    theory.setMilestoneCost(new CustomCost((lvl) => BigNumber.from(milestoneArray[Math.min(lvl, 1)])));
     {
     {
-        AVariable = theory.createMilestoneUpgrade(0, 1);
-        AVariable.description = `Increase Peak Steepness`;
-        AVariable.boughtOrRefunded = (_) => {
+        FExponent = theory.createMilestoneUpgrade(0, 3);
+        FExponent.description = `Increase Peak Steepness`;
+        FExponent.boughtOrRefunded = (_) => {
             theory.invalidatePrimaryEquation();
             updateAvailability();
         }
     }
     {
-        // TODO: This is not quite working as intended yet
-        //       Somehow you get 3 points in one go?
-        kIncrease = theory.createMilestoneUpgrade(1, 3);
+        // BUG: This is not quite working as intended yet
+        //      Somehow you get 3 points in one go?
+        kIncrease = theory.createMilestoneUpgrade(1, 8);
         kIncrease.description = `Multiply k0 by 2`;
         kIncrease.boughtOrRefunded = (_) => {
             theory.invalidatePrimaryEquation();
@@ -308,18 +309,32 @@ let init = () =>
         }
     }
     {
-        // TODO: Here we want to extend the limit by -m
+        rangeIncrease = theory.createMilestoneUpgrade(2, 3);
+        rangeIncrease.description = `Increase range by 2`;
+        rangeIncrease.boughtOrRefunded = (_) => {
+            theory.invalidatePrimaryEquation();
+            theory.invalidateQuaternaryValues();
+            updateAvailability();
+            updateRange()
+        }
     }
     }
+
+    updateAvailability();
+    updateRange();
 }
 
 var updateAvailability = () => {
-    kIncrease.isAvailable = AVariable.level > 0
+    kIncrease.isAvailable = FExponent.level > 0
+    rangeIncrease.isAvailable = FExponent.level > 0
+}
 
-    A.isAvailable = AVariable.level > 0
+function updateRange() {
+    beta_min_lim = -3 - 2 * rangeIncrease.level;
 }
 
 var postPublish = () => {
+    q = BigNumber.ZERO;
 }
 
 // Average shortest path length in small‑world networks derived in mean‑field analyses
@@ -337,7 +352,6 @@ function getLNorm(N, k, p) {
     return BNres.toNumber();
 }
 
-
 // Normalized clustering coefficient in Watts-Strogatz small-world models
 // C(p) roughly equals C(0)(1 - p)^3
 // So normalized C_n(p) = (1 - p)^3/C(0) = (1 - p)^3
@@ -346,7 +360,7 @@ function getCNorm(p) {
     return (1 - p)**3;
 }
 
-// 32-point Gauss–Legendre nodes (x) on [-1, 1]
+// 32-point Gauss–Legendre nodes on [-1, 1]
 const GL32_X = [
   -0.9972638618494816,
   -0.9856115115452684,
@@ -382,7 +396,7 @@ const GL32_X = [
    0.9972638618494816
 ];
 
-// 32-point Gauss–Legendre weights (w) on [-1, 1]
+// 32-point Gauss–Legendre weights on [-1, 1]
 const GL32_W = [
   0.0070186100094700966,
   0.01627439473090567,
@@ -455,34 +469,36 @@ function computeF(start = beta_min_val, end = beta_max_val) {
     return BigNumber.ONE/(BigNumber.ONE - BigNumber.from(avg));
 }
 
-
-let FFinal = 0;
-
 let prev_N, prev_k;
-var tick = (elapsedTime, multiplier) =>
-{
+var tick = (elapsedTime, multiplier) => {
     const dt = BigNumber.from(elapsedTime * multiplier);
     const bonus = theory.publicationMultiplier;
 
-    const A_val = getA(A.level);
+    const Exp_val = getFExp(FExponent.level);
     const N_now = getN(N.level);
     const k_now = getK(kIncrease.level)
 
+    // Update F if value doesn't exist yet
     if (smallWorldness <= BigNumber.ZERO || prev_N !== N_now || prev_k !== k_now) {
         smallWorldness = computeF();
         prev_N = N_now;
         prev_k = k_now;
     }
 
-    const SW = smallWorldness.pow(A_val);
+    // Update q
+    const SW = smallWorldness.pow(Exp_val);
+    const q1_val = getQ1(q1.level);
 
-    FFinal = SW; // NOTE: Temperary variable for debugging
+    q += dt * SW * q1_val;
 
+    // Update rho
     const c1_val = getC1(c1.level);
     const c2_val = getC2(c2.level);
 
-    currency.value += dt * bonus * c1_val * c2_val * SW;
-    rhodot = c1_val * c2_val * SW * bonus;
+    currency.value += dt * bonus * c1_val * c2_val * q;
+
+    rhodot = c1_val * c2_val * q * bonus;
+    qdot = SW * q1_val;
 
     theory.invalidateSecondaryEquation();
     theory.invalidateTertiaryEquation();
@@ -496,14 +512,14 @@ var getPrimaryEquation = () => {
     // The average part
     const avg_utility = `\\frac{1}{\\Delta\\beta} \\int_{\\beta_{\\min}}^{\\beta_{\\max}} U(x) dx`;
 
-    if (AVariable.level > 0) {
+    if (FExponent.level > 0) {
         // If A is unlocked, wrap the average in parenthesis
-        res += `\\left(1 - ${avg_utility} \\right)^{-A}`;
+        res += `\\left(1 - ${avg_utility} \\right)^{${getFExp(FExponent.level).toString(1)}}`;
     } else if (rangeMenu.level > 0) {
         res += avg_utility;
     } else {
         // Default starting state
-        res += `\\int_{-4}^{0} U(x) dx`;
+        res += `\\int_{-3}^{0} U(x) dx`;
     }
 
     return res;
@@ -527,13 +543,15 @@ var getSecondaryEquation = () => {
 }
 
 var getTertiaryEquation = () => {
-    return `F = ${FFinal.toString(6)}`;
+    const F = smallWorldness.pow(getFExp(FExponent.level));
+    return `q = ${q.toString(2)}, F = ${F.toString(6)}`;
 }
 
 var getQuaternaryEntries = () => {
     quaternaryEntries = [];
 
-    quaternaryEntries.push(new QuaternaryEntry("{\\rho}_{{}\\,}", null));
+    quaternaryEntries.push(new QuaternaryEntry("{\\dot{\\rho}}_{{}\\,}", null));
+    quaternaryEntries.push(new QuaternaryEntry("{\\dot{q}}_{{}\\,}", null));
     quaternaryEntries.push(new QuaternaryEntry("{N}_{{}\\,}", null));
     quaternaryEntries.push(new QuaternaryEntry("{k_0}_{{}\\,}", null));
     if (rangeMenu.level > 0) {
@@ -542,11 +560,12 @@ var getQuaternaryEntries = () => {
     }
 
     quaternaryEntries[0].value = `${rhodot.toString(2)}`;
-    quaternaryEntries[1].value = `${getN(N.level).toString(0)}`;
-    quaternaryEntries[2].value = `${(getK(kIncrease.level)).toString(0)}`;
+    quaternaryEntries[1].value = `${qdot.toString(2)}`;
+    quaternaryEntries[2].value = `${getN(N.level).toString(0)}`;
+    quaternaryEntries[3].value = `${(getK(kIncrease.level)).toString(0)}`;
     if (rangeMenu.level > 0) {
-        quaternaryEntries[3].value = `${beta_min_val.toFixed(2)}`;
-        quaternaryEntries[4].value = `${beta_max_val.toFixed(2)}`;
+        quaternaryEntries[4].value = `${beta_min_val.toFixed(2)}`;
+        quaternaryEntries[5].value = `${beta_max_val.toFixed(2)}`;
     }
 
     return quaternaryEntries;
@@ -559,7 +578,7 @@ var getPublicationMultiplier = (tau) => tau.pow(pubPower);
 
 var getPublicationMultiplierFormula = (symbol) => `{${symbol}}^{${pubPower}}`;
 
-var getTau = () => currency.value;
+var getTau = () => currency.value.pow(BigNumber.from(tauRate));
 
 var getCurrencyFromTau = (tau) =>
 [
@@ -567,10 +586,11 @@ var getCurrencyFromTau = (tau) =>
     currency.symbol
 ];
 
-let getC1 = (level) => BigNumber.from(1.35).pow(level);
+let getC1 = (level) => BigNumber.from(1.1).pow(level);
 let getC2 = (level) => BigNumber.TWO.pow(level);
 let getN = (level) => BigNumber.TEN * BigNumber.from(1.1).pow(level);
-let getA = (level) => BigNumber.ONE + BigNumber.from(0.01*level);
+let getQ1 = (level) => BigNumber.from(1.35).pow(level);
+let getFExp = (level) => BigNumber.ONE + BigNumber.from(0.5*level);
 let getK = (level) => BigNumber.TWO.pow(1 + level);
 
 init();
