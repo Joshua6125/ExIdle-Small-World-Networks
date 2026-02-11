@@ -1,5 +1,5 @@
 import { BigNumber } from '../../exp/TheorySDK.Linux.1.4.40/api/BigNumber';
-import { ExponentialCost, FreeCost } from '../../exp/TheorySDK.Linux.1.4.40/api/Costs';
+import { ExponentialCost} from '../../exp/TheorySDK.Linux.1.4.40/api/Costs';
 import { QuaternaryEntry, theory } from '../../exp/TheorySDK.Linux.1.4.40/api/Theory';
 import { LayoutOptions } from '../../exp/TheorySDK.Linux.1.4.40/api/ui/properties/LayoutOptions';
 import { Utils } from '../../exp/TheorySDK.Linux.1.4.40/api/Utils';
@@ -11,21 +11,24 @@ var description =
     "Social circles, the internet, and even neural networks all show a mix of everything being both close while seemingly being far away.\n\n" +
     "In this theory, you tune the rewiring probability of a Watts-Strogatz-style network to make it as small-world as possible. " +
     "By choosing an optimal range of rewiring parameters you shape the balance between local structure and global reach. " +
-    "As the network size grows and new upgrades unlock, you'll sharpen your control over this trade-off and amplify your gains.\n\n" +
+    "As the network size grows and new upgrades unlock, you'll sharpen your control over this trade-off and grow rho.\n\n" +
     "Can you find the sweet spot where order and randomness cooperate to produce the most efficient small-world network?";
 var authors = 'panda_125';
 
-let currency;
-let quaternaryEntries;
+var currency;
+var quaternaryEntries;
 
-let rhodot = BigNumber.ZERO;
-let qdot = BigNumber.ZERO;
+var rhodot = BigNumber.ZERO;
 
-let c1, c2, N, q1;
+var c1, c2, N, q1;
 
-let q = BigNumber.ZERO;
+var q = BigNumber.ZERO;
+var smallWorldness = BigNumber.ZERO;
+var prevN = BigNumber.ZERO;
+var prevK = BigNumber.ZERO;
+var F = 0;
 
-let smallWorldness = BigNumber.ZERO;
+var stage = 1;
 
 let beta_min_lim = -3;
 let beta_max_lim = 0;
@@ -35,22 +38,21 @@ let local_beta_min = beta_min_val;
 let local_beta_max = beta_max_val;
 const BETA_STEP = 0.01;
 
-const pubPower = 0.2;
-const tauRate = 1;
 const pubExponent = 0.2;
+const tauRate = 1;
 
 var createTopRightMenu = () => {
     let SWLabel = ui.createLatexLabel({
         horizontalOptions: LayoutOptions.CENTER,
         text: Utils.getMath(
-            "\\frac{1}{\\Delta\\beta} \\int_{\\beta_{\\min}}^{\\beta_{\\max}} U(x) dx = " + smallWorldness.toString(2)
+            "F = " + F.toFixed(8)
         )
     });
 
     function updateSWLabel() {
-        const SW_val = computeF(local_beta_min, local_beta_max);
+        computeF(local_beta_min, local_beta_max);
         SWLabel.text = Utils.getMath(
-            "\\frac{1}{\\Delta\\beta} \\int_{\\beta_{\\min}}^{\\beta_{\\max}} U(x) dx = " + SW_val.toString(2)
+            "F = " + F.toFixed(8)
         )
     }
 
@@ -164,9 +166,13 @@ var createTopRightMenu = () => {
                 betaLabelMin,
                 betaMinSlider,
                 betaMinButtons,
+                ui.createLabel({
+                    text: "Warning! Setting new range resets q",
+                    horizontalTextAlignment: TextAlignment.CENTER,
+                }),
                 ui.createButton({
                     margin: new Thickness(10),
-                    text: "Done",
+                    text: "Set new range",
                     onReleased: () => {
                         menu.hide();
 
@@ -174,10 +180,6 @@ var createTopRightMenu = () => {
                         beta_min_val = local_beta_min;
                         beta_max_val = local_beta_max;
                         smallWorldness = computeF();
-
-                        // Reset local variables
-                        local_beta_min = beta_min_lim;
-                        local_beta_max = beta_max_lim;
 
                         q = BigNumber.ZERO;
                     }
@@ -235,8 +237,7 @@ var getEquationOverlay = () =>
 }
 
 
-let init = () =>
-{
+let init = () => {
     currency = theory.createCurrency();
 
     {
@@ -286,6 +287,9 @@ let init = () =>
 
     /////////////////////
     // MILESTONES
+
+    // BUG: This is not quite working as intended yet
+    //      Somehow you get 12 points in one go?
     const milestoneArray = [25, 50, 75, 100, 125, 175, 225, 275, 325, 375, 425, 475, 525, 625, -1];
     theory.setMilestoneCost(new CustomCost((lvl) => BigNumber.from(milestoneArray[Math.min(lvl, 1)])));
     {
@@ -298,8 +302,6 @@ let init = () =>
         }
     }
     {
-        // BUG: This is not quite working as intended yet
-        //      Somehow you get 3 points in one go?
         kIncrease = theory.createMilestoneUpgrade(1, 8);
         kIncrease.description = `Multiply k0 by 2`;
         kIncrease.boughtOrRefunded = (_) => {
@@ -466,10 +468,11 @@ function computeF(start = beta_min_val, end = beta_max_val) {
         avg = 0;
     }
 
+    F = avg;
+
     return BigNumber.ONE/(BigNumber.ONE - BigNumber.from(avg));
 }
 
-let prev_N, prev_k;
 var tick = (elapsedTime, multiplier) => {
     const dt = BigNumber.from(elapsedTime * multiplier);
     const bonus = theory.publicationMultiplier;
@@ -479,10 +482,10 @@ var tick = (elapsedTime, multiplier) => {
     const k_now = getK(kIncrease.level)
 
     // Update F if value doesn't exist yet
-    if (smallWorldness <= BigNumber.ZERO || prev_N !== N_now || prev_k !== k_now) {
+    if (smallWorldness <= BigNumber.ZERO || prevN !== N_now || prevK !== k_now) {
         smallWorldness = computeF();
-        prev_N = N_now;
-        prev_k = k_now;
+        prevN = N_now;
+        prevK = k_now;
     }
 
     // Update q
@@ -497,8 +500,8 @@ var tick = (elapsedTime, multiplier) => {
 
     currency.value += dt * bonus * c1_val * c2_val * q;
 
+    // Save visual variables
     rhodot = c1_val * c2_val * q * bonus;
-    qdot = SW * q1_val;
 
     theory.invalidateSecondaryEquation();
     theory.invalidateTertiaryEquation();
@@ -506,85 +509,126 @@ var tick = (elapsedTime, multiplier) => {
 }
 
 var getPrimaryEquation = () => {
-    theory.primaryEquationHeight = 75;
-    let res = `\\dot{\\rho} = c_1 c_2 `;
 
-    // The average part
-    const avg_utility = `\\frac{1}{\\Delta\\beta} \\int_{\\beta_{\\min}}^{\\beta_{\\max}} U(x) dx`;
-
-    if (FExponent.level > 0) {
-        // If A is unlocked, wrap the average in parenthesis
-        res += `\\left(1 - ${avg_utility} \\right)^{${getFExp(FExponent.level).toString(1)}}`;
-    } else if (rangeMenu.level > 0) {
-        res += avg_utility;
+    let res = ``;
+    if (stage === 1) {
+        theory.primaryEquationHeight = 75;
+        res += `\\dot{\\rho} = c_1 c_2 q`;
     } else {
-        // Default starting state
-        res += `\\int_{-3}^{0} U(x) dx`;
+        res += `F = `
+
+        const avg_utility = `\\frac{1}{\\beta_\\max - \\beta_\\min} \\int_{\\beta_{\\min}}^{\\beta_{\\max}} U(x) dx`;
+
+        if (rangeMenu.level > 0) {
+            res += `${avg_utility}`;
+        } else {
+            res += `\\int_{-3}^{0} U(x) dx`;
+        }
     }
 
     return res;
 }
 
 var getSecondaryEquation = () => {
-    theory.secondaryEquationHeight = 85;
 
-    // Define the Utility Function U(x)
-    let res = `U(x) = C(10^x) - L(N k 10^x)`;
 
-    res += `\\\\`;
+    let res = ``
 
-    res += `L(z) = \\frac{\\theta}{\\sinh\\theta}, \\; \\theta = \\text{cosh}^{-1}\\left(\\frac{z+2}{2}\\right)`;
+    if (stage !== 1) {
+        theory.secondaryEquationHeight = 85;
+        res += `U(x) = C(10^x) - L(N k_0 10^x)`;
 
-    res += `\\\\`;
+        res += `\\\\`;
 
-    res += `C(p) = (1-p)^3`;
+        res += `L(z) = \\frac{\\theta}{\\sinh\\theta}, \\; \\theta = \\text{cosh}^{-1}\\left(\\frac{z+2}{2}\\right)`;
+
+        res += `\\\\`;
+
+        res += `C(p) = (1-p)^3`;
+    } else {
+        theory.secondaryEquationHeight = 60;
+        res += `\\dot{q} = q_1 \\hat{F}`;
+
+        res += `\\\\`;
+
+        res += `\\hat{F} = `;
+
+        const FExp = getFExp(FExponent.level);
+
+        if (FExponent.level > 0) {
+            res += `\\left( \\frac{1}{1 - F} \\right)^{${FExponent.level % 2 == 0 ? FExp.toString(0) : FExp.toString(1)}}`;
+        } else {
+            res += `\\left( \\frac{1}{1 - F} \\right)`;
+        }
+    }
 
     return res;
 }
 
 var getTertiaryEquation = () => {
-    const F = smallWorldness.pow(getFExp(FExponent.level));
-    return `q = ${q.toString(2)}, F = ${F.toString(6)}`;
+    return `F = ${F.toFixed(8)}`;
 }
 
 var getQuaternaryEntries = () => {
     quaternaryEntries = [];
 
-    quaternaryEntries.push(new QuaternaryEntry("{\\dot{\\rho}}_{{}\\,}", null));
-    quaternaryEntries.push(new QuaternaryEntry("{\\dot{q}}_{{}\\,}", null));
-    quaternaryEntries.push(new QuaternaryEntry("{N}_{{}\\,}", null));
-    quaternaryEntries.push(new QuaternaryEntry("{k_0}_{{}\\,}", null));
-    if (rangeMenu.level > 0) {
-        quaternaryEntries.push(new QuaternaryEntry("{\\beta_\\min}_{{}\\,}", null));
-        quaternaryEntries.push(new QuaternaryEntry("{\\beta_\\max}_{{}\\,}", null));
-    }
+    if (stage === 1) {
+        quaternaryEntries.push(new QuaternaryEntry("{\\dot{\\rho}}_{{}\\,}", null));
+        quaternaryEntries.push(new QuaternaryEntry("{q}_{{}\\,}", null));
+        quaternaryEntries.push(new QuaternaryEntry("{\\hat{F}}_{{}\\,}", null));
 
-    quaternaryEntries[0].value = `${rhodot.toString(2)}`;
-    quaternaryEntries[1].value = `${qdot.toString(2)}`;
-    quaternaryEntries[2].value = `${getN(N.level).toString(0)}`;
-    quaternaryEntries[3].value = `${(getK(kIncrease.level)).toString(0)}`;
-    if (rangeMenu.level > 0) {
-        quaternaryEntries[4].value = `${beta_min_val.toFixed(2)}`;
-        quaternaryEntries[5].value = `${beta_max_val.toFixed(2)}`;
+        const FHat = smallWorldness.pow(getFExp(FExponent.level));
+
+        quaternaryEntries[0].value = `${rhodot.toString(2)}`;
+        quaternaryEntries[1].value = `${q.toString(2)}`;
+        quaternaryEntries[2].value = `${FHat.toString(2)}`;
+
+    } else {
+        quaternaryEntries.push(new QuaternaryEntry("{N}_{{}\\,}", null));
+        quaternaryEntries.push(new QuaternaryEntry("{k_0}_{{}\\,}", null));
+        if (rangeMenu.level > 0) {
+            quaternaryEntries.push(new QuaternaryEntry("\\;\\beta^-", null));
+            quaternaryEntries.push(new QuaternaryEntry("\\;\\beta^+", null));
+        }
+
+        quaternaryEntries[0].value = `${getN(N.level).toString(0)}`;
+        quaternaryEntries[1].value = `${(getK(kIncrease.level)).toString(0)}`;
+        if (rangeMenu.level > 0) {
+            quaternaryEntries[2].value = `${beta_min_val.toFixed(2)}`;
+            quaternaryEntries[3].value = `${beta_max_val.toFixed(2)}`;
+        }
+
     }
 
     return quaternaryEntries;
 }
 
+var canGoToPreviousStage = () => stage === 1;
+var goToPreviousStage = () => {
+  stage--;
+  theory.invalidatePrimaryEquation();
+  theory.invalidateSecondaryEquation();
+  theory.invalidateTertiaryEquation();
+  quaternaryEntries = [];
+  theory.invalidateQuaternaryValues();
+};
+var canGoToNextStage = () => stage === 0;
+var goToNextStage = () => {
+  stage++;
+  theory.invalidatePrimaryEquation();
+  theory.invalidateSecondaryEquation();
+  theory.invalidateTertiaryEquation();
+  quaternaryEntries = [];
+  theory.invalidateQuaternaryValues();
+};
+
 var get2DGraphValue = () => currency.value.sign *
 (BigNumber.ONE + currency.value.abs()).log10().toNumber();
 
-var getPublicationMultiplier = (tau) => tau.pow(pubPower);
-
-var getPublicationMultiplierFormula = (symbol) => `{${symbol}}^{${pubPower}}`;
-
-var getTau = () => currency.value.pow(BigNumber.from(tauRate));
-
-var getCurrencyFromTau = (tau) =>
-[
-    tau.max(BigNumber.ONE),
-    currency.symbol
-];
+var getPublicationMultiplier = (tau) => tau.pow(pubExponent);
+var getPublicationMultiplierFormula = (symbol) => `${symbol}^{${pubExponent}}`;
+var getTau = () => currency.value.pow(tauRate);
+var getCurrencyFromTau = (tau) => [tau.max(BigNumber.ONE).pow(BigNumber.ONE / tauRate), currency.symbol]
 
 let getC1 = (level) => BigNumber.from(1.1).pow(level);
 let getC2 = (level) => BigNumber.TWO.pow(level);
