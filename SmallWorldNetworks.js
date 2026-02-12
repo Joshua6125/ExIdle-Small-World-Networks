@@ -45,14 +45,14 @@ var createTopRightMenu = () => {
     let SWLabel = ui.createLatexLabel({
         horizontalOptions: LayoutOptions.CENTER,
         text: Utils.getMath(
-            "F = " + F.toString(8)
+            "F = " + F.toFixed(8)
         )
     });
 
     function updateSWLabel() {
         computeF(local_beta_min, local_beta_max);
         SWLabel.text = Utils.getMath(
-            "F = " + F.toString(8)
+            "F = " + F.toFixed(8)
         )
     }
 
@@ -303,6 +303,7 @@ let init = () => {
             theory.invalidateSecondaryEquation();
             updateAvailability();
         }
+        q2Unlock.canBeRefunded = (_) => (kIncrease.level === 0 && rangeIncrease.level === 0 && FExponent.level === 0);
     }
     {
         kIncrease = theory.createMilestoneUpgrade(1, 8);
@@ -685,7 +686,7 @@ var getSecondaryEquation = () => {
 }
 
 var getTertiaryEquation = () => {
-    return `F = ${F.toString(8)}`;
+    return `F = ${F.toFixed(8)}`;
 }
 
 var getQuaternaryEntries = () => {
@@ -724,25 +725,36 @@ var getQuaternaryEntries = () => {
 
 var canGoToPreviousStage = () => stage === 1;
 var goToPreviousStage = () => {
-  stage--;
-  theory.invalidatePrimaryEquation();
-  theory.invalidateSecondaryEquation();
-  theory.invalidateTertiaryEquation();
-  quaternaryEntries = [];
-  theory.invalidateQuaternaryValues();
+    stage--;
+    theory.invalidatePrimaryEquation();
+    theory.invalidateSecondaryEquation();
+    theory.invalidateTertiaryEquation();
+    quaternaryEntries = [];
+    theory.invalidateQuaternaryValues();
 };
 var canGoToNextStage = () => stage === 0;
 var goToNextStage = () => {
-  stage++;
-  theory.invalidatePrimaryEquation();
-  theory.invalidateSecondaryEquation();
-  theory.invalidateTertiaryEquation();
-  quaternaryEntries = [];
-  theory.invalidateQuaternaryValues();
+    stage++;
+    theory.invalidatePrimaryEquation();
+    theory.invalidateSecondaryEquation();
+    theory.invalidateTertiaryEquation();
+    quaternaryEntries = [];
+    theory.invalidateQuaternaryValues();
 };
 
 var get2DGraphValue = () => currency.value.sign *
-(BigNumber.ONE + currency.value.abs()).log10().toNumber();
+    (BigNumber.ONE + currency.value.abs()).log10().toNumber();
+
+var getInternalState = () => `${q.toNumber()} ${beta_min_val} ${beta_max_val}`;
+
+var setInternalState = (state) => {
+    let values = state.split(" ");
+    if (values.length > 0) q = BigNumber.from(values[0]);
+    if (values.length > 1) beta_min_val = Number(values[1]);
+    if (values.length > 2) beta_max_val = Number(values[2]);
+
+
+  };
 
 var getPublicationMultiplier = (tau) => tau.pow(pubExponent);
 var getPublicationMultiplierFormula = (symbol) => `${symbol}^{${pubExponent}}`;
