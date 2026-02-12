@@ -34,6 +34,8 @@ let beta_min_lim = -3;
 let beta_max_lim = 0;
 let beta_min_val = beta_min_lim;
 let beta_max_val = beta_max_lim;
+
+let local_F = 0;
 let local_beta_min = beta_min_val;
 let local_beta_max = beta_max_val;
 const BETA_STEP = 0.01;
@@ -45,14 +47,14 @@ var createTopRightMenu = () => {
     let SWLabel = ui.createLatexLabel({
         horizontalOptions: LayoutOptions.CENTER,
         text: Utils.getMath(
-            "\\hat{F} = " + smallWorldness.toString(8)
+            "F = " + local_F.toFixed(8)
         )
     });
 
     function updateSWLabel() {
-        const SW = computeF(local_beta_min, local_beta_max, save_F=false);
+        computeF(local_beta_min, local_beta_max, local=true);
         SWLabel.text = Utils.getMath(
-            "\\hat{F} = " + SW.toString(8)
+            "F = " + local_F.toFixed(8)
         )
     }
 
@@ -241,7 +243,7 @@ let init = () => {
     currency = theory.createCurrency();
 
     {
-        c1 = theory.createUpgrade(0, currency, new ExponentialCost(10, Math.log2(1.67)));
+        c1 = theory.createUpgrade(0, currency, new ExponentialCost(10, Math.log2(1.6)));
         let getDesc = (level) => "c_1 = " + getC1(level).toString(2);
         c1.getDescription = (_) => Utils.getMath(getDesc(c1.level));
         c1.getInfo = (amount) => Utils.getMathTo(getDesc(c1.level), getDesc(c1.level + amount));
@@ -540,7 +542,7 @@ const GL32_W = [
   0.0070186100094700966
 ];
 
-function computeF(start = beta_min_val, end = beta_max_val, save_F = true) {
+function computeF(start = beta_min_val, end = beta_max_val, local = false) {
     const N_val = getN(N.level);
     const k_val = getK(kIncrease.level);
 
@@ -583,7 +585,11 @@ function computeF(start = beta_min_val, end = beta_max_val, save_F = true) {
         avg = 0;
     }
 
-    if (save_F) F = avg;
+    if (local) {
+        local_F = avg;
+    } else {
+        F = avg;
+    }
 
     return BigNumber.ONE/(BigNumber.ONE - BigNumber.from(avg));
 }
@@ -625,7 +631,6 @@ var tick = (elapsedTime, multiplier) => {
 }
 
 var getPrimaryEquation = () => {
-
     let res = ``;
     if (stage === 1) {
         theory.primaryEquationHeight = 75;
@@ -646,10 +651,7 @@ var getPrimaryEquation = () => {
 }
 
 var getSecondaryEquation = () => {
-
-
     let res = ``
-
     if (stage !== 1) {
         theory.secondaryEquationHeight = 85;
         res += `U(x) = C(10^x) - L(N k_0 10^x)`;
@@ -717,7 +719,6 @@ var getQuaternaryEntries = () => {
             quaternaryEntries[2].value = `${beta_min_val.toFixed(2)}`;
             quaternaryEntries[3].value = `${beta_max_val.toFixed(2)}`;
         }
-
     }
 
     return quaternaryEntries;
@@ -752,20 +753,18 @@ var setInternalState = (state) => {
     if (values.length > 0) q = BigNumber.from(values[0]);
     if (values.length > 1) beta_min_val = Number(values[1]);
     if (values.length > 2) beta_max_val = Number(values[2]);
-
-
-  };
+};
 
 var getPublicationMultiplier = (tau) => tau.pow(pubExponent);
 var getPublicationMultiplierFormula = (symbol) => `${symbol}^{${pubExponent}}`;
 var getTau = () => currency.value.pow(tauRate);
 var getCurrencyFromTau = (tau) => [tau.max(BigNumber.ONE).pow(BigNumber.ONE / tauRate), currency.symbol]
 
-let getC1 = (level) => BigNumber.from(1.12).pow(level);
+let getC1 = (level) => BigNumber.from(1.14).pow(level);
 let getC2 = (level) => BigNumber.TWO.pow(level);
 let getN = (level) => BigNumber.TEN * BigNumber.from(1.1).pow(level);
-let getQ1 = (level) => BigNumber.from(1.35).pow(level);
-let getQ2 = (level) => BigNumber.from(5000) * Utils.getStepwisePowerSum(level, 10, 25, 0);
+let getQ1 = (level) => BigNumber.from(1.36).pow(level);
+let getQ2 = (level) => BigNumber.from(2000) * Utils.getStepwisePowerSum(level, 10, 25, 0);
 let getFExp = (level) => BigNumber.ONE + BigNumber.from(0.5*level);
 let getK = (level) => BigNumber.TWO * BigNumber.TEN.pow(level);
 
