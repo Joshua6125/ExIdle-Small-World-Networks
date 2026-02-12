@@ -30,14 +30,14 @@ var F = 0;
 
 var stage = 1;
 
-let beta_min_lim = -3;
-let beta_max_lim = 0;
-let beta_min_val = beta_min_lim;
-let beta_max_val = beta_max_lim;
+var beta_min_lim = -3;
+var beta_max_lim = 0;
+var beta_min_val = beta_min_lim;
+var beta_max_val = beta_max_lim;
 
-let local_F = 0;
-let local_beta_min = beta_min_val;
-let local_beta_max = beta_max_val;
+var local_F = 0;
+var local_beta_min = beta_min_val;
+var local_beta_max = beta_max_val;
 const BETA_STEP = 0.01;
 
 const pubExponent = 0.2;
@@ -195,8 +195,7 @@ var createTopRightMenu = () => {
 
 var topRightMenu = createTopRightMenu();
 
-var getEquationOverlay = () =>
-{
+var getEquationOverlay = () => {
     let result = ui.createGrid
     ({
         inputTransparent: true,
@@ -314,7 +313,7 @@ let init = () => {
             theory.invalidatePrimaryEquation();
             updateAvailability();
         }
-        C1Exponent.canBeRefunded = (_) => (q2Unlock.level > 0 && kIncrease.level === 0);
+        C1Exponent.canBeRefunded = (_) => (q2Unlock.level > 0);
     }
     {
         FExponent = theory.createMilestoneUpgrade(2, 3);
@@ -323,7 +322,7 @@ let init = () => {
             theory.invalidatePrimaryEquation();
             updateAvailability();
         }
-        FExponent.canBeRefunded = (_) => q2Unlock.level > 0;
+        FExponent.canBeRefunded = (_) => (q2Unlock.level > 0 && kIncrease.level === 0);
     }
     {
         rangeIncrease = theory.createMilestoneUpgrade(3, 3);
@@ -387,14 +386,12 @@ var getMilestoneCost = (level) => {
             return 650;
         case 15:
             return 700;
-        // case 16:
-        //     return 750;
-        // case 17:
-        //     return 800;
-        // case 18:
-        //     return 900;
-        // case 18:
-        //     return 1000;
+        case 16:
+            return 750;
+        case 17:
+            return 800;
+        case 18:
+            return 1000;
     }
     return 5000;
 };
@@ -763,13 +760,13 @@ var goToNextStage = () => {
 var get2DGraphValue = () => currency.value.sign *
     (BigNumber.ONE + currency.value.abs()).log10().toNumber();
 
-var getInternalState = () => `${q.toNumber()} ${beta_min_val} ${beta_max_val}`;
+var getInternalState = () => `${q} ${beta_min_val} ${beta_max_val}`;
 
 var setInternalState = (state) => {
     let values = state.split(" ");
-    if (values.length > 0) q = BigNumber.from(values[0]);
-    if (values.length > 1) beta_min_val = Number(values[1]);
-    if (values.length > 2) beta_max_val = Number(values[2]);
+    if (values.length > 0) q = parseBigNumber(values[0]);
+    if (values.length > 1) beta_min_val = parseFloat(values[1]);
+    if (values.length > 2) beta_max_val = parseFloat(values[2]);
 };
 
 var getPublicationMultiplier = (tau) => tau.pow(pubExponent);
