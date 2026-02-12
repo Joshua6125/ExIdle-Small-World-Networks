@@ -305,16 +305,16 @@ let init = () => {
             theory.invalidateSecondaryEquation();
             updateAvailability();
         }
-        q2Unlock.canBeRefunded = (_) => (kIncrease.level === 0 && rangeIncrease.level === 0 && FExponent.level === 0);
+        q2Unlock.canBeRefunded = (_) => (C1Exponent.level === 0 && rangeIncrease.level === 0 && FExponent.level === 0);
     }
     {
-        kIncrease = theory.createMilestoneUpgrade(1, 8);
-        kIncrease.description = `${Localization.getUpgradeMultCustomInfo("k_0", "10")}`;
-        kIncrease.boughtOrRefunded = (_) => {
+        C1Exponent = theory.createMilestoneUpgrade(1, 3);
+        C1Exponent.description = `${Localization.getUpgradeIncCustomExpInfo("c_1", "0.05")}`;
+        C1Exponent.boughtOrRefunded = (_) => {
             theory.invalidatePrimaryEquation();
-            theory.invalidateQuaternaryValues();
             updateAvailability();
         }
+        C1Exponent.canBeRefunded = (_) => (q2Unlock.level > 0 && kIncrease.level === 0);
     }
     {
         FExponent = theory.createMilestoneUpgrade(2, 3);
@@ -323,7 +323,7 @@ let init = () => {
             theory.invalidatePrimaryEquation();
             updateAvailability();
         }
-        FExponent.canBeRefunded = (_) => q2Unlock.level > 0
+        FExponent.canBeRefunded = (_) => q2Unlock.level > 0;
     }
     {
         rangeIncrease = theory.createMilestoneUpgrade(3, 3);
@@ -334,7 +334,17 @@ let init = () => {
             updateAvailability();
             updateRange()
         }
-        rangeIncrease.canBeRefunded = (_) => q2Unlock.level > 0
+        rangeIncrease.canBeRefunded = (_) => q2Unlock.level > 0;
+    }
+    {
+        kIncrease = theory.createMilestoneUpgrade(4, 8);
+        kIncrease.description = `${Localization.getUpgradeMultCustomInfo("k_0", "10")}`;
+        kIncrease.boughtOrRefunded = (_) => {
+            theory.invalidatePrimaryEquation();
+            theory.invalidateQuaternaryValues();
+            updateAvailability();
+        }
+        kIncrease.canBeRefunded = (_) => FExponent.level === 3;
     }
     }
 
@@ -390,9 +400,10 @@ var getMilestoneCost = (level) => {
 };
 
 var updateAvailability = () => {
+    C1Exponent.isAvailable = q2Unlock.level > 0;
     FExponent.isAvailable = q2Unlock.level > 0;
     rangeIncrease.isAvailable = q2Unlock.level > 0;
-    kIncrease.isAvailable = q2Unlock.level > 0;
+    kIncrease.isAvailable = FExponent.level === 3;
 
     q2.isAvailable = q2Unlock.level > 0;
 }
@@ -598,7 +609,8 @@ var tick = (elapsedTime, multiplier) => {
     const dt = BigNumber.from(elapsedTime * multiplier);
     const bonus = theory.publicationMultiplier;
 
-    const Exp_val = getFExp(FExponent.level);
+    const FExp_val = getFExp(FExponent.level);
+    const C1Exp_val = getC1Exp(C1Exponent.level);
     const N_now = getN(N.level);
     const k_now = getK(kIncrease.level)
 
@@ -610,14 +622,14 @@ var tick = (elapsedTime, multiplier) => {
     }
 
     // Update q
-    const SW = smallWorldness.pow(Exp_val);
+    const SW = smallWorldness.pow(FExp_val);
     const q1_val = getQ1(q1.level);
     const q2_val = getQ2(q2.level);
 
     q += dt * SW * q1_val + dt * SW * q2_val;
 
     // Update rho
-    const c1_val = getC1(c1.level);
+    const c1_val = getC1(c1.level).pow(C1Exp_val);
     const c2_val = getC2(c2.level);
 
     currency.value += dt * bonus * c1_val * c2_val * q;
@@ -634,7 +646,12 @@ var getPrimaryEquation = () => {
     let res = ``;
     if (stage === 1) {
         theory.primaryEquationHeight = 75;
-        res += `\\dot{\\rho} = c_1 c_2 q`;
+        if (C1Exponent.level > 0) {
+            const C1Exp = getC1Exp(C1Exponent.level);
+            res += `\\dot{\\rho} = c_1^{${C1Exponent.level % 2 == 0 ? C1Exp.toString(1) : C1Exp.toString(2)}} c_2 q`;
+        } else {
+            res += `\\dot{\\rho} = c_1 c_2 q`;
+        }
     } else {
         res += `F = `
 
@@ -766,6 +783,7 @@ let getN = (level) => BigNumber.TEN * BigNumber.from(1.1).pow(level);
 let getQ1 = (level) => BigNumber.from(1.36).pow(level);
 let getQ2 = (level) => BigNumber.from(2000) * Utils.getStepwisePowerSum(level, 10, 25, 0);
 let getFExp = (level) => BigNumber.ONE + BigNumber.from(0.5*level);
+let getC1Exp = (level) => BigNumber.ONE + BigNumber.from(0.05*level);
 let getK = (level) => BigNumber.TWO * BigNumber.TEN.pow(level);
 
 init();
