@@ -430,9 +430,7 @@ function getUInt(N, k, beta) {
 
     const t = ((z + TWO + sqrt_term)/TWO).log();
 
-    const half_t = t/TWO;
-
-    const e_half_t = half_t.exp();
+    const e_half_t = (t/TWO).exp();
     const e_half_t_sq = e_half_t.pow(TWO);
 
     const coth_half_t = (e_half_t_sq + ONE)/(e_half_t_sq - ONE);
