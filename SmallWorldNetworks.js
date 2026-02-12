@@ -45,14 +45,14 @@ var createTopRightMenu = () => {
     let SWLabel = ui.createLatexLabel({
         horizontalOptions: LayoutOptions.CENTER,
         text: Utils.getMath(
-            "F = " + F.toFixed(8)
+            "F = " + F.toString(8)
         )
     });
 
     function updateSWLabel() {
         computeF(local_beta_min, local_beta_max);
         SWLabel.text = Utils.getMath(
-            "F = " + F.toFixed(8)
+            "F = " + F.toString(8)
         )
     }
 
@@ -406,6 +406,47 @@ var postPublish = () => {
     q = BigNumber.ZERO;
 }
 
+
+// Closed form of the antiderivative of the utility function U(x)
+function getUInt(N, k, beta) {
+    const ln10 = BigNumber.TEN.log();
+    const ONE = BigNumber.ONE
+    const TWO = BigNumber.TWO;
+    const THREE = BigNumber.THREE;
+    const FOUR = BigNumber.FOUR;
+
+    const p = BigNumber.TEN.pow(beta);
+    const c = N * k;
+    const z = c * p;
+
+    const betaBN = BigNumber.from(beta);
+    const p2 = p.pow(TWO);
+    const p3 = p.pow(THREE);
+
+    const F_C = betaBN - (p*THREE)/ln10 + (p2*THREE)/(ln10*TWO) - p3/(ln10*THREE);
+
+    const z2_4z = z.pow(TWO) + (z*FOUR);
+    const sqrt_term = z2_4z.sqrt();
+
+    const t = ((z + TWO + sqrt_term)/TWO).log();
+
+    const half_t = t/TWO;
+
+    const e_half_t = half_t.exp();
+    const e_half_t_sq = e_half_t.pow(TWO);
+
+    const coth_half_t = (e_half_t_sq + ONE)/(e_half_t_sq - ONE);
+
+    const e_half_t_inv = ONE/e_half_t;
+    const sinh_half_t = (e_half_t - e_half_t_inv)/TWO;
+
+    const log_sinh_half_t = sinh_half_t.log();
+
+    const F_L = (-t*coth_half_t + log_sinh_half_t * TWO)/ln10;
+
+    return F_C - F_L;
+}
+
 // Average shortest path length in small‑world networks derived in mean‑field analyses
 // (what is used in Newman-Moore-Watts models)
 // https://arxiv.org/pdf/cond-mat/9909165 (Eq 21)
@@ -425,7 +466,6 @@ function getLNorm(N, k, p) {
 // C(p) roughly equals C(0)(1 - p)^3
 // So normalized C_n(p) = (1 - p)^3/C(0) = (1 - p)^3
 function getCNorm(p) {
-    // C_norm = (1 - p)^3
     return (1 - p)**3;
 }
 
@@ -510,6 +550,14 @@ function computeF(start = beta_min_val, end = beta_max_val) {
         return 0;
     }
 
+    // ------- Code for closed formulation ---------
+    // const F_start  = getUInt(N_val, k_val, BigNumber.from(start)).toNumber();
+    // const F_end = getUInt(N_val, k_val, BigNumber.from(end)).toNumber();
+
+    // let avg = (F_end - F_start)/range;
+    // -------------------------------
+
+    // -------------- Gauss-Legendre quadrature ---------
     const mid  = (start + end) / 2;
     const half = range / 2;
 
@@ -530,6 +578,7 @@ function computeF(start = beta_min_val, end = beta_max_val) {
     }
 
     let avg = sum / 2;
+    // -----------------------------
 
     if (avg < 0 || avg >= 1) {
         avg = 0;
@@ -638,7 +687,7 @@ var getSecondaryEquation = () => {
 }
 
 var getTertiaryEquation = () => {
-    return `F = ${F.toFixed(8)}`;
+    return `F = ${F.toString(8)}`;
 }
 
 var getQuaternaryEntries = () => {
