@@ -26,7 +26,7 @@ var q = BigNumber.ZERO;
 var smallWorldness = BigNumber.ZERO;
 var prevN = BigNumber.ZERO;
 var prevK = BigNumber.ZERO;
-var F = 0;
+var oneMinusF = BigNumber.ZERO;
 
 var stage = 1;
 
@@ -35,7 +35,7 @@ var beta_max_lim = 0;
 var beta_min_val = beta_min_lim;
 var beta_max_val = beta_max_lim;
 
-var local_F = 0;
+var localOneMinusF = BigNumber.ZERO;
 var local_beta_min = beta_min_val;
 var local_beta_max = beta_max_val;
 const BETA_STEP = 0.01;
@@ -47,14 +47,14 @@ var createTopRightMenu = () => {
     let SWLabel = ui.createLatexLabel({
         horizontalOptions: LayoutOptions.CENTER,
         text: Utils.getMath(
-            "F = " + local_F.toFixed(8)
+            "1 - F = " + localOneMinusF.toString(3)
         )
     });
 
     function updateSWLabel() {
-        computeF(local_beta_min, local_beta_max, local=true);
+        computeError(local_beta_min, local_beta_max, local=true);
         SWLabel.text = Utils.getMath(
-            "F = " + local_F.toFixed(8)
+            "1 - F = " + localOneMinusF.toString(3)
         )
     }
 
@@ -181,7 +181,7 @@ var createTopRightMenu = () => {
                         // Set new variables
                         beta_min_val = local_beta_min;
                         beta_max_val = local_beta_max;
-                        smallWorldness = computeF();
+                        smallWorldness = computeError();
 
                         q = BigNumber.ZERO;
                     }
@@ -417,7 +417,6 @@ var postPublish = () => {
     q = BigNumber.ZERO;
 }
 
-
 // Closed form of the antiderivative of the utility function U(x)
 function getUInt(N, k, beta) {
     const ln10 = BigNumber.TEN.log();
@@ -468,14 +467,14 @@ function getLNorm(N, k, p) {
     const log_term = ((z + BigNumber.TWO + sqrt_term) / BigNumber.TWO).log();
     const BNres = (BigNumber.TWO * log_term) / sqrt_term;
 
-    return BNres.toNumber();
+    return BNres; // Returns a BigNumber!
 }
 
 // Normalized clustering coefficient in Watts-Strogatz small-world models
 // C(p) roughly equals C(0)(1 - p)^3
 // So normalized C_n(p) = (1 - p)^3/C(0) = (1 - p)^3
 function getCNorm(p) {
-    return (1 - p)**3;
+    return (BigNumber.ONE - p).pow(BigNumber.THREE);
 }
 
 // 32-point Gauss–Legendre nodes on [-1, 1]
@@ -550,13 +549,16 @@ const GL32_W = [
   0.0070186100094700966
 ];
 
-function computeF(start = beta_min_val, end = beta_max_val, local = false) {
+function computeError(start = beta_min_val, end = beta_max_val, local = false) {
     const N_val = getN(N.level);
     const k_val = getK(kIncrease.level);
 
+    start = BigNumber.from(start);
+    end = BigNumber.from(end);
+
     let range = end - start;
-    if (range <= 0) {
-        return 0;
+    if (range <= BigNumber.ZERO) {
+        return BigNumber.ZERO;
     }
 
     // ------- Code for closed formulation ---------
@@ -567,39 +569,43 @@ function computeF(start = beta_min_val, end = beta_max_val, local = false) {
     // -------------------------------
 
     // -------------- Gauss-Legendre quadrature ---------
-    const mid  = (start + end) / 2;
-    const half = range / 2;
+    const mid  = (start + end) / BigNumber.TWO;
+    const half = range / BigNumber.TWO;
 
-    let sum = 0
+    let sum = BigNumber.ZERO
 
     for (let i = 0; i < GL32_X.length; i++) {
-        const xi = GL32_X[i];
-        const wi = GL32_W[i];
+        const xi = BigNumber.from(GL32_X[i]);
+        const wi = BigNumber.from(GL32_W[i]);
 
         const beta = mid + half * xi;
-        const p = 10**beta;
 
-        const C_val = getCNorm(p);
+        const p = BigNumber.TEN.pow(beta);
+
+        // Do the subtraction here instead of in 1/(1 - F)
+        const C_val = BigNumber.ONE - getCNorm(p);
         const L_val = getLNorm(N_val, k_val, p);
 
-        const f = C_val - L_val;
+        const f = C_val + L_val;
         sum += wi * f;
     }
-
-    let avg = sum / 2;
     // -----------------------------
 
-    if (avg < 0 || avg >= 1) {
-        avg = 0;
-    }
-
+    // This is (1 - F)
     if (local) {
-        local_F = avg;
+        localOneMinusF = sum/BigNumber.TWO;
     } else {
-        F = avg;
+        oneMinusF = sum/BigNumber.TWO;
     }
 
-    return BigNumber.ONE/(BigNumber.ONE - BigNumber.from(avg));
+    // This is 1/(1 - F)
+    let oneDivOneMinF = BigNumber.TWO/sum;
+
+    if (oneDivOneMinF === BigNumber.ZERO) {
+        oneDivOneMinF = BigNumber.ONE;
+    }
+
+    return oneDivOneMinF;
 }
 
 var tick = (elapsedTime, multiplier) => {
@@ -613,7 +619,7 @@ var tick = (elapsedTime, multiplier) => {
 
     // Update F if value doesn't exist yet
     if (smallWorldness <= BigNumber.ZERO || prevN !== N_now || prevK !== k_now) {
-        smallWorldness = computeF();
+        smallWorldness = computeError();
         prevN = N_now;
         prevK = k_now;
     }
@@ -702,7 +708,7 @@ var getSecondaryEquation = () => {
 }
 
 var getTertiaryEquation = () => {
-    return `F = ${F.toFixed(8)}`;
+    return `1 - F = ${oneMinusF.toString(3)}`;
 }
 
 var getQuaternaryEntries = () => {
