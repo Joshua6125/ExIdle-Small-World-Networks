@@ -45,14 +45,14 @@ var createTopRightMenu = () => {
     let SWLabel = ui.createLatexLabel({
         horizontalOptions: LayoutOptions.CENTER,
         text: Utils.getMath(
-            "F = " + F.toFixed(8)
+            "\\hat{F} = " + smallWorldness.toString(8)
         )
     });
 
     function updateSWLabel() {
-        computeF(local_beta_min, local_beta_max);
+        const SW = computeF(local_beta_min, local_beta_max, save_F=false);
         SWLabel.text = Utils.getMath(
-            "F = " + F.toFixed(8)
+            "\\hat{F} = " + SW.toString(8)
         )
     }
 
@@ -540,7 +540,7 @@ const GL32_W = [
   0.0070186100094700966
 ];
 
-function computeF(start = beta_min_val, end = beta_max_val) {
+function computeF(start = beta_min_val, end = beta_max_val, save_F = true) {
     const N_val = getN(N.level);
     const k_val = getK(kIncrease.level);
 
@@ -583,7 +583,7 @@ function computeF(start = beta_min_val, end = beta_max_val) {
         avg = 0;
     }
 
-    F = avg;
+    if (save_F) F = avg;
 
     return BigNumber.ONE/(BigNumber.ONE - BigNumber.from(avg));
 }
