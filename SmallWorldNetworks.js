@@ -477,6 +477,13 @@ function getCNorm(p) {
     return (BigNumber.ONE - p).pow(BigNumber.THREE);
 }
 
+// To prevent cancellation we expand C(p) and get rid of the 1 entirely
+// C = (1 - p)^3
+// 1 - C = 3p - 3p^2 + p^3
+function getOneMinusC(p) {
+    return p*(BigNumber.THREE - BigNumber.THREE*p + p.pow(2))
+}
+
 // 32-point Gauss–Legendre nodes on [-1, 1]
 const GL32_X = [
   -0.9972638618494816,
@@ -583,10 +590,10 @@ function computeError(start = beta_min_val, end = beta_max_val, local = false) {
         const p = BigNumber.TEN.pow(beta);
 
         // Do the subtraction here instead of in 1/(1 - F)
-        const C_val = BigNumber.ONE - getCNorm(p);
+        const oneMinusC_val = getOneMinusC(p);
         const L_val = getLNorm(N_val, k_val, p);
 
-        const f = C_val + L_val;
+        const f = oneMinusC_val + L_val;
         sum += wi * f;
     }
     // -----------------------------
