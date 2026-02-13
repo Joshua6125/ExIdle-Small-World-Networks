@@ -279,10 +279,10 @@ let init = () => {
 
     /////////////////////////
     // PERMANENT UPGRADES
-    theory.createPublicationUpgrade(0, currency, 1e7);
-    theory.createBuyAllUpgrade(1, currency, 1e10);
+    theory.createPublicationUpgrade(0, currency, 1e10);
+    theory.createBuyAllUpgrade(1, currency, 1e15);
     {
-        rangeMenu = theory.createPermanentUpgrade(2, currency, new LinearCost(1e12, 0));
+        rangeMenu = theory.createPermanentUpgrade(2, currency, new ConstantCost(1e20));
         rangeMenu.maxLevel = 1;
         rangeMenu.getDescription = (_) => `Add variable ranges`;
         rangeMenu.getInfo = (_) => Localization.getUpgradeUnlockInfo("\\text{Range Menu}");
@@ -418,42 +418,43 @@ var postPublish = () => {
 }
 
 // Closed form of the antiderivative of the utility function U(x)
-function getUInt(N, k, beta) {
-    const ln10 = BigNumber.TEN.log();
-    const ONE = BigNumber.ONE
-    const TWO = BigNumber.TWO;
-    const THREE = BigNumber.THREE;
-    const FOUR = BigNumber.FOUR;
+// function getUInt(N, k, beta) {
+//     const ln10 = BigNumber.TEN.log();
+//     const ONE = BigNumber.ONE
+//     const TWO = BigNumber.TWO;
+//     const THREE = BigNumber.THREE;
+//     const FOUR = BigNumber.FOUR;
 
-    const p = BigNumber.TEN.pow(beta);
-    const c = N * k;
-    const z = c * p;
+//     const p = BigNumber.TEN.pow(beta);
+//     const c = N * k;
+//     const z = c * p;
 
-    const betaBN = BigNumber.from(beta);
-    const p2 = p.pow(TWO);
-    const p3 = p.pow(THREE);
+//     const betaBN = BigNumber.from(beta);
+//     const p2 = p.pow(TWO);
+//     const p3 = p.pow(THREE);
 
-    const F_C = betaBN - (p*THREE)/ln10 + (p2*THREE)/(ln10*TWO) - p3/(ln10*THREE);
+//     const F_C = betaBN - (p*THREE)/ln10 + (p2*THREE)/(ln10*TWO) - p3/(ln10*THREE);
 
-    const z2_4z = z.pow(TWO) + (z*FOUR);
-    const sqrt_term = z2_4z.sqrt();
+//     const z2_4z = z.pow(TWO) + (z*FOUR);
+//     const sqrt_term = z2_4z.sqrt();
 
-    const t = ((z + TWO + sqrt_term)/TWO).log();
+//     const t = ((z + TWO + sqrt_term)/TWO).log();
 
-    const e_half_t = (t/TWO).exp();
-    const e_half_t_sq = e_half_t.pow(TWO);
+//     const e_half_t = (t/TWO).exp();
+//     const e_half_t_sq = e_half_t.pow(TWO);
 
-    const coth_half_t = (e_half_t_sq + ONE)/(e_half_t_sq - ONE);
+//     const coth_half_t = (e_half_t_sq + ONE)/(e_half_t_sq - ONE);
 
-    const e_half_t_inv = ONE/e_half_t;
-    const sinh_half_t = (e_half_t - e_half_t_inv)/TWO;
+//     const e_half_t_inv = ONE/e_half_t;
+//     const sinh_half_t = (e_half_t - e_half_t_inv)/TWO;
 
-    const log_sinh_half_t = sinh_half_t.log();
+//     const log_sinh_half_t = sinh_half_t.log();
 
-    const F_L = (-t*coth_half_t + log_sinh_half_t * TWO)/ln10;
+//     const F_L = (-t*coth_half_t + log_sinh_half_t * TWO)/ln10;
 
-    return F_C - F_L;
-}
+//     return F_C - F_L;
+// }
+
 
 // Average shortest path length in small‑world networks derived in mean‑field analyses
 // (what is used in Newman-Moore-Watts models)
@@ -467,15 +468,15 @@ function getLNorm(N, k, p) {
     const log_term = ((z + BigNumber.TWO + sqrt_term) / BigNumber.TWO).log();
     const BNres = (BigNumber.TWO * log_term) / sqrt_term;
 
-    return BNres; // Returns a BigNumber!
+    return BNres;
 }
 
 // Normalized clustering coefficient in Watts-Strogatz small-world models
 // C(p) roughly equals C(0)(1 - p)^3
 // So normalized C_n(p) = (1 - p)^3/C(0) = (1 - p)^3
-function getCNorm(p) {
-    return (BigNumber.ONE - p).pow(BigNumber.THREE);
-}
+// function getCNorm(p) {
+//     return (BigNumber.ONE - p).pow(BigNumber.THREE);
+// }
 
 // To prevent cancellation we expand C(p) and get rid of the 1 entirely
 // C = (1 - p)^3
@@ -641,11 +642,12 @@ var tick = (elapsedTime, multiplier) => {
     // Update rho
     const c1_val = getC1(c1.level).pow(C1Exp_val);
     const c2_val = getC2(c2.level);
+    const range = rangeMenu.level > 0 ? BigNumber.from(beta_max_val - beta_min_val).abs() : 1;
 
-    currency.value += dt * bonus * c1_val * c2_val * q;
+    currency.value += dt * bonus * c1_val * c2_val * q * range;
 
     // Save visual variables
-    rhodot = c1_val * c2_val * q * bonus;
+    rhodot = c1_val * c2_val * q * bonus * range;
 
     theory.invalidateSecondaryEquation();
     theory.invalidateTertiaryEquation();
@@ -662,6 +664,7 @@ var getPrimaryEquation = () => {
         } else {
             res += `\\dot{\\rho} = c_1 c_2 q`;
         }
+        res += `|\\beta^+ - \\beta^-|`
     } else {
         res += `F = `
 
@@ -725,12 +728,20 @@ var getQuaternaryEntries = () => {
         quaternaryEntries.push(new QuaternaryEntry("{\\dot{\\rho}}_{{}\\,}", null));
         quaternaryEntries.push(new QuaternaryEntry("{q}_{{}\\,}", null));
         quaternaryEntries.push(new QuaternaryEntry("{\\hat{F}}_{{}\\,}", null));
+        if (rangeMenu.level > 0) {
+            quaternaryEntries.push(new QuaternaryEntry("\\;\\beta^-", null));
+            quaternaryEntries.push(new QuaternaryEntry("\\;\\beta^+", null));
+        }
 
         const FHat = smallWorldness.pow(getFExp(FExponent.level));
 
         quaternaryEntries[0].value = `${rhodot.toString(2)}`;
         quaternaryEntries[1].value = `${q.toString(2)}`;
         quaternaryEntries[2].value = `${FHat.toString(2)}`;
+        if (rangeMenu.level > 0) {
+            quaternaryEntries[3].value = `${beta_min_val.toFixed(2)}`;
+            quaternaryEntries[4].value = `${beta_max_val.toFixed(2)}`;
+        }
 
     } else {
         quaternaryEntries.push(new QuaternaryEntry("{N}_{{}\\,}", null));
@@ -789,7 +800,7 @@ var getCurrencyFromTau = (tau) => [tau.max(BigNumber.ONE).pow(BigNumber.ONE / ta
 
 let getC1 = (level) => BigNumber.from(1.14).pow(level);
 let getC2 = (level) => BigNumber.TWO.pow(level);
-let getN = (level) => BigNumber.TEN * BigNumber.from(1.1).pow(level);
+let getN = (level) => BigNumber.TEN * BigNumber.TWO * BigNumber.from(1.1).pow(level);
 let getQ1 = (level) => BigNumber.from(1.36).pow(level);
 let getQ2 = (level) => BigNumber.from(2000) * Utils.getStepwisePowerSum(level, 10, 25, 0);
 let getFExp = (level) => BigNumber.ONE + BigNumber.from(0.5*level);
