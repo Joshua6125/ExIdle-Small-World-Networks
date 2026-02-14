@@ -15,35 +15,34 @@ var description =
     "Can you find the sweet spot where order and randomness cooperate to produce the most efficient small-world network?";
 var authors = 'panda_125';
 
-var currency;
-var quaternaryEntries;
+let currency;
+let quaternaryEntries;
 
-var rhodot = BigNumber.ZERO;
+let rhodot = BigNumber.ZERO;
 
-var c1, c2, N, q1, q2;
+let c1, c2, N, q1, q2;
 
-var q = BigNumber.ZERO;
-var smallWorldness = BigNumber.ZERO;
-var prevN = BigNumber.ZERO;
-var prevK = BigNumber.ZERO;
-var oneMinusF = BigNumber.ZERO;
+let q = BigNumber.ZERO;
+let oneOverOneMinusF = BigNumber.ZERO;
+let prevN = BigNumber.ZERO;
+let prevK = BigNumber.ZERO;
 
-var stage = 1;
+let stage = 1;
 
-var beta_min_lim = -3;
-var beta_max_lim = 0;
-var beta_min_val = beta_min_lim;
-var beta_max_val = beta_max_lim;
-
-var localOneMinusF = BigNumber.ZERO;
-var local_beta_min = beta_min_val;
-var local_beta_max = beta_max_val;
+let betaMinLim = -3;
+let betaMaxLim = 0;
+let betaMinVal = betaMinLim;
+let betaMaxVal = betaMaxLim;
 const BETA_STEP = 0.01;
 
 const pubExponent = 0.2;
 const tauRate = 0.4;
 
-var createTopRightMenu = () => {
+const createTopRightMenu = () => {
+    let localBetaMin = betaMinVal;
+    let localBetaMax = betaMaxVal;
+    let localOneMinusF = BigNumber.ZERO;
+
     let SWLabel = ui.createLatexLabel({
         horizontalOptions: LayoutOptions.CENTER,
         text: Utils.getMath(
@@ -52,7 +51,7 @@ var createTopRightMenu = () => {
     });
 
     function updateSWLabel() {
-        computeError(local_beta_min, local_beta_max, local=true);
+        localOneMinusF = BigNumber.ONE/computeError(localBetaMin, localBetaMax);
         SWLabel.text = Utils.getMath(
             "1 - F = " + localOneMinusF.toString(3)
         )
@@ -61,37 +60,37 @@ var createTopRightMenu = () => {
     let betaLabelMax = ui.createLatexLabel({
         horizontalOptions: LayoutOptions.CENTER,
         text: Utils.getMath(
-            "\\beta^+=" + beta_max_val.toFixed(2)
+            "\\beta^+=" + localBetaMax.toFixed(2)
         )
     });
 
     let betaLabelMin = ui.createLatexLabel({
         horizontalOptions: LayoutOptions.CENTER,
         text: Utils.getMath(
-            "\\beta^-=" + beta_min_val.toFixed(2)
+            "\\beta^-=" + localBetaMin.toFixed(2)
         )
     });
 
     function updateBetaMaxVals() {
         betaLabelMax.text = Utils.getMath(
-            "\\beta^+=" + local_beta_max.toFixed(2)
+            "\\beta^+=" + localBetaMax.toFixed(2)
         );
-        betaMaxSlider.value = local_beta_max;
+        betaMaxSlider.value = localBetaMax;
     }
 
     function updateBetaMinVals() {
         betaLabelMin.text = Utils.getMath(
-            "\\beta^-=" + local_beta_min.toFixed(2)
+            "\\beta^-=" + localBetaMin.toFixed(2)
         );
-        betaMinSlider.value = local_beta_min;
+        betaMinSlider.value = localBetaMin;
     }
 
     let betaMaxSlider = ui.createSlider({
-        minimum: () => beta_min_lim + BETA_STEP,
-        maximum: () => beta_max_lim,
-        value: local_beta_max,
+        minimum: () => betaMinLim + BETA_STEP,
+        maximum: () => betaMaxLim,
+        value: localBetaMax,
         onValueChanged: () => {
-            local_beta_max = Math.max(betaMaxSlider.value, local_beta_min + BETA_STEP);
+            localBetaMax = Math.max(betaMaxSlider.value, localBetaMin + BETA_STEP);
             updateBetaMaxVals();
             updateSWLabel();
             theory.invalidatePrimaryEquation();
@@ -99,11 +98,11 @@ var createTopRightMenu = () => {
     });
 
     let betaMinSlider = ui.createSlider({
-        minimum: () => beta_min_lim,
-        maximum: () => beta_max_lim - BETA_STEP,
-        value: local_beta_min,
+        minimum: () => betaMinLim,
+        maximum: () => betaMaxLim - BETA_STEP,
+        value: localBetaMin,
         onValueChanged: () => {
-            local_beta_min = Math.min(betaMinSlider.value, local_beta_max - BETA_STEP);
+            localBetaMin = Math.min(betaMinSlider.value, localBetaMax - BETA_STEP);
             updateBetaMinVals();
             updateSWLabel();
             theory.invalidatePrimaryEquation();
@@ -117,7 +116,7 @@ var createTopRightMenu = () => {
             ui.createButton({
                 text: "-0.01",
                 onReleased: () => {
-                    local_beta_max = Math.max(local_beta_min + BETA_STEP, local_beta_max - BETA_STEP);
+                    localBetaMax = Math.max(localBetaMin + BETA_STEP, localBetaMax - BETA_STEP);
                     updateBetaMaxVals();
                     updateSWLabel();
                 }
@@ -125,7 +124,7 @@ var createTopRightMenu = () => {
             ui.createButton({
                 text: "+0.01",
                 onReleased: () => {
-                    local_beta_max = Math.min(beta_max_lim, local_beta_max + BETA_STEP);
+                    localBetaMax = Math.min(betaMaxLim, localBetaMax + BETA_STEP);
                     updateBetaMaxVals();
                     updateSWLabel();
                 }
@@ -140,7 +139,7 @@ var createTopRightMenu = () => {
             ui.createButton({
                 text: "-0.01",
                 onReleased: () => {
-                    local_beta_min = Math.max(beta_min_lim, local_beta_min - BETA_STEP);
+                    localBetaMin = Math.max(betaMinLim, localBetaMin - BETA_STEP);
                     updateBetaMinVals();
                     updateSWLabel();
                 }
@@ -148,7 +147,7 @@ var createTopRightMenu = () => {
             ui.createButton({
                 text: "+0.01",
                 onReleased: () => {
-                    local_beta_min = Math.min(local_beta_max - BETA_STEP, local_beta_min + BETA_STEP);
+                    localBetaMin = Math.min(localBetaMax - BETA_STEP, localBetaMin + BETA_STEP);
                     updateBetaMinVals()
                     updateSWLabel();
                 }
@@ -179,9 +178,9 @@ var createTopRightMenu = () => {
                         menu.hide();
 
                         // Set new variables
-                        beta_min_val = local_beta_min;
-                        beta_max_val = local_beta_max;
-                        smallWorldness = computeError();
+                        betaMinVal = localBetaMin;
+                        betaMaxVal = localBetaMax;
+                        oneOverOneMinusF = computeError();
 
                         q = BigNumber.ZERO;
                     }
@@ -193,7 +192,7 @@ var createTopRightMenu = () => {
     return menu;
 }
 
-var topRightMenu = createTopRightMenu();
+let topRightMenu = createTopRightMenu();
 
 var getEquationOverlay = () => {
     let result = ui.createGrid
@@ -236,7 +235,6 @@ var getEquationOverlay = () => {
     });
     return result;
 }
-
 
 let init = () => {
     currency = theory.createCurrency();
@@ -352,7 +350,7 @@ let init = () => {
 }
 
 // milestone costs in rho
-var getMilestoneCost = (level) => {
+let getMilestoneCost = (level) => {
     switch(level) {
         case 0:
             return 25;
@@ -406,9 +404,9 @@ var updateAvailability = () => {
 }
 
 function updateRange() {
-    beta_min_lim = -3 - 2 * rangeIncrease.level;
-    beta_max_val = beta_max_lim;
-    beta_min_val = beta_min_lim;
+    betaMinLim = -3 - 2 * rangeIncrease.level;
+    betaMaxVal = betaMaxLim;
+    betaMinVal = betaMinLim;
 
     topRightMenu = createTopRightMenu();
 }
@@ -416,45 +414,6 @@ function updateRange() {
 var postPublish = () => {
     q = BigNumber.ZERO;
 }
-
-// Closed form of the antiderivative of the utility function U(x)
-// function getUInt(N, k, beta) {
-//     const ln10 = BigNumber.TEN.log();
-//     const ONE = BigNumber.ONE
-//     const TWO = BigNumber.TWO;
-//     const THREE = BigNumber.THREE;
-//     const FOUR = BigNumber.FOUR;
-
-//     const p = BigNumber.TEN.pow(beta);
-//     const c = N * k;
-//     const z = c * p;
-
-//     const betaBN = BigNumber.from(beta);
-//     const p2 = p.pow(TWO);
-//     const p3 = p.pow(THREE);
-
-//     const F_C = betaBN - (p*THREE)/ln10 + (p2*THREE)/(ln10*TWO) - p3/(ln10*THREE);
-
-//     const z2_4z = z.pow(TWO) + (z*FOUR);
-//     const sqrt_term = z2_4z.sqrt();
-
-//     const t = ((z + TWO + sqrt_term)/TWO).log();
-
-//     const e_half_t = (t/TWO).exp();
-//     const e_half_t_sq = e_half_t.pow(TWO);
-
-//     const coth_half_t = (e_half_t_sq + ONE)/(e_half_t_sq - ONE);
-
-//     const e_half_t_inv = ONE/e_half_t;
-//     const sinh_half_t = (e_half_t - e_half_t_inv)/TWO;
-
-//     const log_sinh_half_t = sinh_half_t.log();
-
-//     const F_L = (-t*coth_half_t + log_sinh_half_t * TWO)/ln10;
-
-//     return F_C - F_L;
-// }
-
 
 // Average shortest path length in small‑world networks derived in mean‑field analyses
 // (what is used in Newman-Moore-Watts models)
@@ -474,10 +433,6 @@ function getLNorm(N, k, p) {
 // Normalized clustering coefficient in Watts-Strogatz small-world models
 // C(p) roughly equals C(0)(1 - p)^3
 // So normalized C_n(p) = (1 - p)^3/C(0) = (1 - p)^3
-// function getCNorm(p) {
-//     return (BigNumber.ONE - p).pow(BigNumber.THREE);
-// }
-
 // To prevent cancellation we expand C(p) and get rid of the 1 entirely
 // C = (1 - p)^3
 // 1 - C = 3p - 3p^2 + p^3
@@ -557,9 +512,9 @@ const GL32_W = [
   0.0070186100094700966
 ];
 
-function computeError(start = beta_min_val, end = beta_max_val, local = false) {
-    const N_val = getN(N.level);
-    const k_val = getK(kIncrease.level);
+function computeError(start = betaMinVal, end = betaMaxVal) {
+    const nVal = getN(N.level);
+    const kVal = getK(kIncrease.level);
 
     start = BigNumber.from(start);
     end = BigNumber.from(end);
@@ -569,14 +524,6 @@ function computeError(start = beta_min_val, end = beta_max_val, local = false) {
         return BigNumber.ZERO;
     }
 
-    // ------- Code for closed formulation ---------
-    // const F_start  = getUInt(N_val, k_val, BigNumber.from(start)).toNumber();
-    // const F_end = getUInt(N_val, k_val, BigNumber.from(end)).toNumber();
-
-    // let avg = (F_end - F_start)/range;
-    // -------------------------------
-
-    // -------------- Gauss-Legendre quadrature ---------
     const mid  = (start + end) / BigNumber.TWO;
     const half = range / BigNumber.TWO;
 
@@ -592,18 +539,10 @@ function computeError(start = beta_min_val, end = beta_max_val, local = false) {
 
         // Do the subtraction here instead of in 1/(1 - F)
         const oneMinusC_val = getOneMinusC(p);
-        const L_val = getLNorm(N_val, k_val, p);
+        const L_val = getLNorm(nVal, kVal, p);
 
         const f = oneMinusC_val + L_val;
         sum += wi * f;
-    }
-    // -----------------------------
-
-    // This is (1 - F)
-    if (local) {
-        localOneMinusF = sum/BigNumber.TWO;
-    } else {
-        oneMinusF = sum/BigNumber.TWO;
     }
 
     // This is 1/(1 - F)
@@ -617,37 +556,37 @@ function computeError(start = beta_min_val, end = beta_max_val, local = false) {
 }
 
 var tick = (elapsedTime, multiplier) => {
-    const dt = BigNumber.from(elapsedTime * multiplier);
+    const dt = BigNumber.from(elapsedTime * multiplier) * BigNumber.TEN;
     const bonus = theory.publicationMultiplier;
 
-    const FExp_val = getFExp(FExponent.level);
-    const C1Exp_val = getC1Exp(C1Exponent.level);
-    const N_now = getN(N.level);
-    const k_now = getK(kIncrease.level)
+    const curN = getN(N.level);
+    const curK = getK(kIncrease.level)
 
     // Update F if value doesn't exist yet
-    if (smallWorldness <= BigNumber.ZERO || prevN !== N_now || prevK !== k_now) {
-        smallWorldness = computeError();
-        prevN = N_now;
-        prevK = k_now;
+    if (oneOverOneMinusF <= BigNumber.ZERO || prevN !== curN || prevK !== curK) {
+        oneOverOneMinusF = computeError();
+        prevN = curN;
+        prevK = curK;
     }
 
     // Update q
-    const SW = smallWorldness.pow(FExp_val);
-    const q1_val = getQ1(q1.level);
-    const q2_val = getQ2(q2.level);
+    const FExpVal = getFExp(FExponent.level);
+    const SW = oneOverOneMinusF.pow(FExpVal);
+    const q1Val = getQ1(q1.level);
+    const q2Val = getQ2(q2.level);
 
-    q += dt * SW * q1_val + dt * SW * q2_val;
+    q += dt * SW * q1Val + dt * SW * q2Val;
 
     // Update rho
-    const c1_val = getC1(c1.level).pow(C1Exp_val);
-    const c2_val = getC2(c2.level);
-    const range = rangeMenu.level > 0 ? BigNumber.from(beta_max_val - beta_min_val).abs() : 1;
+    const C1ExpVal = getC1Exp(C1Exponent.level);
+    const c1Val = getC1(c1.level).pow(C1ExpVal);
+    const c2Val = getC2(c2.level);
+    const range = rangeMenu.level > 0 ? BigNumber.from(betaMaxVal - betaMinVal).abs() : 1;
 
-    currency.value += dt * bonus * c1_val * c2_val * q * range;
+    currency.value += dt * bonus * c1Val * c2Val * q * range;
 
     // Save visual variables
-    rhodot = c1_val * c2_val * q * bonus * range;
+    rhodot = c1Val * c2Val * q * bonus * range;
 
     theory.invalidateSecondaryEquation();
     theory.invalidateTertiaryEquation();
@@ -718,6 +657,7 @@ var getSecondaryEquation = () => {
 }
 
 var getTertiaryEquation = () => {
+    const oneMinusF = BigNumber.ONE/oneOverOneMinusF;
     return `1 - F = ${oneMinusF.toString(3)}`;
 }
 
@@ -733,14 +673,14 @@ var getQuaternaryEntries = () => {
             quaternaryEntries.push(new QuaternaryEntry("\\;\\beta^+", null));
         }
 
-        const FHat = smallWorldness.pow(getFExp(FExponent.level));
+        const FHat = oneOverOneMinusF.pow(getFExp(FExponent.level));
 
         quaternaryEntries[0].value = `${rhodot.toString(2)}`;
         quaternaryEntries[1].value = `${q.toString(2)}`;
         quaternaryEntries[2].value = `${FHat.toString(2)}`;
         if (rangeMenu.level > 0) {
-            quaternaryEntries[3].value = `${beta_min_val.toFixed(2)}`;
-            quaternaryEntries[4].value = `${beta_max_val.toFixed(2)}`;
+            quaternaryEntries[3].value = `${betaMinVal.toFixed(2)}`;
+            quaternaryEntries[4].value = `${betaMaxVal.toFixed(2)}`;
         }
 
     } else {
@@ -754,8 +694,8 @@ var getQuaternaryEntries = () => {
         quaternaryEntries[0].value = `${getN(N.level).toString(0)}`;
         quaternaryEntries[1].value = `${(getK(kIncrease.level)).toString(0)}`;
         if (rangeMenu.level > 0) {
-            quaternaryEntries[2].value = `${beta_min_val.toFixed(2)}`;
-            quaternaryEntries[3].value = `${beta_max_val.toFixed(2)}`;
+            quaternaryEntries[2].value = `${betaMinVal.toFixed(2)}`;
+            quaternaryEntries[3].value = `${betaMaxVal.toFixed(2)}`;
         }
     }
 
@@ -784,13 +724,13 @@ var goToNextStage = () => {
 var get2DGraphValue = () => currency.value.sign *
     (BigNumber.ONE + currency.value.abs()).log10().toNumber();
 
-var getInternalState = () => `${q} ${beta_min_val} ${beta_max_val}`;
+var getInternalState = () => `${q} ${betaMinVal} ${betaMaxVal}`;
 
 var setInternalState = (state) => {
     let values = state.split(" ");
     if (values.length > 0) q = parseBigNumber(values[0]);
-    if (values.length > 1) beta_min_val = parseFloat(values[1]);
-    if (values.length > 2) beta_max_val = parseFloat(values[2]);
+    if (values.length > 1) betaMinVal = parseFloat(values[1]);
+    if (values.length > 2) betaMaxVal = parseFloat(values[2]);
 };
 
 var getPublicationMultiplier = (tau) => tau.pow(pubExponent);
