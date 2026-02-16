@@ -35,8 +35,49 @@ let betaMinVal = betaMinLim;
 let betaMaxVal = betaMaxLim;
 const BETA_STEP = 0.01;
 
-const pubExponent = 0.2;
+const pubExponent = 0.3;
 const tauRate = 0.4;
+
+var numberFormat = (value, decimals, negExpFlag=false) => {
+    if (value >= BigNumber.ZERO)
+    {
+        if (value >= BigNumber.from(0.1) || value == BigNumber.ZERO)
+        {
+            if (value > BigNumber.ZERO && value < BigNumber.ONE && decimals < 3)
+            {
+                return value.toString(3);
+            }
+            return value.toString(decimals);
+        }
+        else
+        {
+            let exp = Math.floor((value*BigNumber.from(1+1e-5)).log10().toNumber());
+            let mts = (value * BigNumber.TEN.pow(-exp)).toString(decimals);
+            if (exp > 0 || !negExpFlag)
+            {
+                return `${mts}e${exp}`;
+            }
+            else
+            {
+                return `${mts}e-${-exp}`;
+            }
+        }
+    }
+    else
+    {
+        value = -value;
+        if (value >= BigNumber.from(0.1) || value == BigNumber.ZERO)
+        {
+            return (-value).toString(decimals);
+        }
+        else
+        {
+            let exp = Math.floor((value*BigNumber.from(1+1e-5)).log10().toNumber());
+            let mts = (value * BigNumber.TEN.pow(-exp)).toString(decimals);
+            return `-${mts}e${exp}`;
+        }
+    }
+}
 
 const createTopRightMenu = () => {
     let localBetaMin = betaMinVal;
@@ -46,14 +87,14 @@ const createTopRightMenu = () => {
     let SWLabel = ui.createLatexLabel({
         horizontalOptions: LayoutOptions.CENTER,
         text: Utils.getMath(
-            "1 - F = " + localOneMinusF.toString(3)
+            "1 - F = " + numberFormat(localOneMinusF, 3, true)
         )
     });
 
     function updateSWLabel() {
         localOneMinusF = BigNumber.ONE/computeError(localBetaMin, localBetaMax);
         SWLabel.text = Utils.getMath(
-            "1 - F = " + localOneMinusF.toString(3)
+            "1 - F = " + numberFormat(localOneMinusF, 3, true)
         )
     }
 
@@ -323,7 +364,7 @@ let init = () => {
         FExponent.canBeRefunded = (_) => (q2Unlock.level > 0 && kIncrease.level === 0);
     }
     {
-        rangeIncrease = theory.createMilestoneUpgrade(3, 3);
+        rangeIncrease = theory.createMilestoneUpgrade(3, 9);
         rangeIncrease.description = `Increase range size by 2`;
         rangeIncrease.boughtOrRefunded = (_) => {
             theory.invalidatePrimaryEquation();
@@ -334,7 +375,7 @@ let init = () => {
         rangeIncrease.canBeRefunded = (_) => q2Unlock.level > 0;
     }
     {
-        kIncrease = theory.createMilestoneUpgrade(4, 8);
+        kIncrease = theory.createMilestoneUpgrade(4, 3);
         kIncrease.description = `${Localization.getUpgradeMultCustomInfo("k_0", "10")}`;
         kIncrease.boughtOrRefunded = (_) => {
             theory.invalidatePrimaryEquation();
@@ -377,19 +418,19 @@ let getMilestoneCost = (level) => {
         case 11:
             return 500;
         case 12:
-            return 550;
-        case 13:
             return 600;
-        case 14:
-            return 650;
-        case 15:
+        case 13:
             return 700;
-        case 16:
-            return 750;
-        case 17:
+        case 14:
             return 800;
-        case 18:
+        case 15:
+            return 900;
+        case 16:
             return 1000;
+        case 17:
+            return 1100;
+        case 18:
+            return 1250;
     }
     return 5000;
 };
@@ -556,7 +597,7 @@ function computeError(start = betaMinVal, end = betaMaxVal) {
 }
 
 var tick = (elapsedTime, multiplier) => {
-    const dt = BigNumber.from(elapsedTime * multiplier) * BigNumber.TEN;
+    const dt = BigNumber.from(elapsedTime * multiplier);
     const bonus = theory.publicationMultiplier;
 
     const curN = getN(N.level);
@@ -658,7 +699,7 @@ var getSecondaryEquation = () => {
 
 var getTertiaryEquation = () => {
     const oneMinusF = BigNumber.ONE/oneOverOneMinusF;
-    return `1 - F = ${oneMinusF.toString(3)}`;
+    return `1 - F = ` + numberFormat(oneMinusF, 3, true);
 }
 
 var getQuaternaryEntries = () => {
@@ -740,7 +781,7 @@ var getCurrencyFromTau = (tau) => [tau.max(BigNumber.ONE).pow(BigNumber.ONE / ta
 
 let getC1 = (level) => BigNumber.from(1.14).pow(level);
 let getC2 = (level) => BigNumber.TWO.pow(level);
-let getN = (level) => BigNumber.TEN * BigNumber.TWO * BigNumber.from(1.1).pow(level);
+let getN = (level) => BigNumber.TEN * BigNumber.TWO * BigNumber.from(1.2).pow(level);
 let getQ1 = (level) => BigNumber.from(1.36).pow(level);
 let getQ2 = (level) => BigNumber.from(2000) * Utils.getStepwisePowerSum(level, 10, 25, 0);
 let getFExp = (level) => BigNumber.ONE + BigNumber.from(0.5*level);
