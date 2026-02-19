@@ -644,11 +644,11 @@ var getPrimaryEquation = () => {
         } else {
             res += `\\dot{\\rho} = c_1 c_2 q`;
         }
-        res += `|\\beta^+ - \\beta^-|`
+        res += `\\Delta\\beta`
     } else {
         res += `F = `
 
-        const avg_utility = `\\frac{1}{\\beta^+ - \\beta^-} \\int_{\\beta^-}^{\\beta^+} U(x) dx`;
+        const avg_utility = `\\frac{1}{\\Delta \\beta} \\int_{\\beta^-}^{\\beta^+} U(x) dx`;
 
         if (rangeMenu.level > 0) {
             res += `${avg_utility}`;
